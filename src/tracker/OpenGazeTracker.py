@@ -53,6 +53,15 @@ class OpenGazeTracker:
             if line.startswith('<REC'):
                 # Split by space and remove empty strings
                 parts = [part for part in line.split(' ') if part]
+
+                # If empty, skip
+                if not parts:
+                    continue
+
+                # Remove <REC and /> from first and last parts
+                parts.pop(0)
+                parts.pop(-1)
+
                 for part in parts:
                     # Split by = and remove empty strings
                     key, value = [x for x in part.split('=') if x]
