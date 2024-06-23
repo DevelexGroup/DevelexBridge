@@ -10,6 +10,7 @@ class OpenGazeTracker:
         self.data_callback = data_callback
         self.reader = None
         self.writer = None
+        self.keep_fixation_data = True # TODO: Implement this
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
@@ -22,7 +23,7 @@ class OpenGazeTracker:
             if not data:
                 break
             print(f"Received: {data.decode()!r}")
-            await self.data_callback(self.decode_data(data))
+            self.decode_data(data)
 
 
     async def send_to_tracker(self, command):
@@ -33,7 +34,7 @@ class OpenGazeTracker:
         self.writer.close()
         await self.writer.wait_closed()
 
-    def decode_data(self, data: bytes) -> dict:
+    def decode_data(self, data: bytes):
         """
         Decode the data received from the tracker.
         This function should be overridden in subclasses.
@@ -69,4 +70,26 @@ class OpenGazeTracker:
                     value = value.strip('"')
                     data_dict[key] = value
 
-        return data_dict    
+                self.data_callback(self.parse_rec(data_dict))
+
+    def parse_rec(self, data: dict) -> dict:
+        """
+        Parse the data dictionary of "rec" and return a dictionary with the relevant data structure
+        for transfer to the client.
+
+        :param data: The data dictionary received from the tracker.
+        """
+        base_data = {
+            'x': data.get('FPOGX'),
+            'y': data.get('FPOGY'),
+            'timestamp': data.get('TIME_TICK'),
+            'deviceValidity': True, # TODO: Implement this
+            'type': 'point',
+        }
+
+        # if is fixation
+        if data.get('FPOGV') == '1':
+            base_data['fixationId'] = data.get('FPOGID')    
+            base_data['fixationStart'] = data.get('FPOGS'),
+
+        return base_data
