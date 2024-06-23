@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 class OpenGazeTracker:
     """
@@ -11,11 +12,13 @@ class OpenGazeTracker:
         self.reader = None
         self.writer = None
         self.keep_fixation_data = True # TODO: Implement this
+        self.base_timestamp = time.time()
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
         print('Connected to TCP server')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
+        # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print('Sent commands to tracker')
         while True:
@@ -70,7 +73,9 @@ class OpenGazeTracker:
                     value = value.strip('"')
                     data_dict[key] = value
 
-                self.data_callback(self.parse_rec(data_dict))
+                parsed_data = self.parse_rec(data_dict)
+                print(parsed_data)
+                self.data_callback(parsed_data)
 
     def parse_rec(self, data: dict) -> dict:
         """
@@ -79,17 +84,22 @@ class OpenGazeTracker:
 
         :param data: The data dictionary received from the tracker.
         """
+
+        # timestamp as int, provisionally from time.time()
+        # TODO: Implement timestamp from tracker, but that will be difficult, CPU ticks?
+        timestamp = time.time()
+
         base_data = {
             'x': data.get('FPOGX'),
             'y': data.get('FPOGY'),
-            'timestamp': data.get('TIME_TICK'),
-            'deviceValidity': True, # TODO: Implement this
+            'timestamp': timestamp,
+            'deviceValidity': True, # TODO: Implement this via Best POG, BPOGV
             'type': 'point',
         }
 
-        # if is fixation
+        # if is fixation via inbuilt fixation filter data
         if data.get('FPOGV') == '1':
-            base_data['fixationId'] = data.get('FPOGID')    
-            base_data['fixationStart'] = data.get('FPOGS'),
+            base_data['fixationId'] = data.get('FPOGID')
+            base_data['fixationDuration'] = float(data.get('FPOGD'))
 
         return base_data
