@@ -1,93 +1,139 @@
 # develex-bridge
+This is a Python WebSocket bridge between remote eye-tracking devices and the develex-core JavaScript library.
 
+## WebSocket Messages
+The bridge sends and receives messages in JSON format to communicate with the develex-core library.
 
+### Incoming Messages
+The bridge listens for the following messages from the develex-core library:
+1. `connect` - The develex-core library sends this message to the bridge to establish a connection. It contains configuration.
+2. `start` - The develex-core library sends this message to the bridge to start emitting points data of gaze.
+3. `stop` - The develex-core library sends this message to the bridge to stop emitting points data of gaze.
+4. `calibrate` - The develex-core library sends this message to the bridge to start the calibration process.
+5. `disconnect` - The develex-core library sends this message to the bridge to close the connection with the eye-tracking device.
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
+#### 1. `connect`
+For GazePoint eye-trackers (or any other using Open Gaze API), the `connect` message should look like this:
+```json
+{
+  "type": "connect",
+  "tracker": "opengaze",
+  "keepFixations": true | false,
+}
 ```
-cd existing_repo
-git remote add origin https://gitlab.ics.muni.cz/473783/develex-bridge.git
-git branch -M master
-git push -uf origin master
+
+For SMI eye-trackers, the `connect` message should look like this:
+```json
+{
+  "type": "connect",
+  "tracker": "smi"
+}
 ```
 
-## Integrate with your tools
+For EyeLogic eye-trackers, the `connect` message should look like this:
+```json
+{
+  "type": "connect",
+  "tracker": "eyelogic"
+}
+```
 
-- [ ] [Set up project integrations](https://gitlab.ics.muni.cz/473783/develex-bridge/-/settings/integrations)
+Note that additional fields are probably about to be added to the `connect` message.
 
-## Collaborate with your team
+#### 2. `start`
+The `start` message should look like this:
+```json
+{
+  "type": "start"
+}
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+It is same for all eye-trackers.
 
-## Test and Deploy
+#### 3. `stop`
+The `stop` message should look like this:
+```json
+{
+  "type": "stop"
+}
+```
 
-Use the built-in continuous integration in GitLab.
+It is same for all eye-trackers.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+#### 4. `calibrate`
+The `calibrate` message should look like this:
+```json
+{
+  "type": "calibrate"
+}
+```
 
-***
+#### 5. `disconnect`
+The `disconnect` message should look like this:
+```json
+{
+  "type": "disconnect"
+}
+```
 
-# Editing this README
+It is same for all eye-trackers.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Outgoing Messages
+The bridge sends the following messages to the develex-core library:
+1. `connected` - The bridge sends this message to the develex-core library to confirm that the connection has been established.
+2. `point` - The bridge sends this message to the develex-core library to emit gaze points data.
+3. `calibrated` - The bridge sends this message to the develex-core library to confirm that the calibration process has been completed.
+4. `disconnected` - The bridge sends this message to the develex-core library to confirm that the connection has been closed.
+5. `error` - The bridge sends this message to the develex-core library to report an error.
 
-## Suggestions for a good README
+#### 1. `connected`
+The `connected` message should look like this:
+```json
+{
+  "type": "connected"
+}
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+#### 2. `point`
+The `point` message should look like this:
+```json
+{
+    "type": "point",
+    "xL": "The x-coordinate of the gaze point. Left eye.",
+    "yL": "The y-coordinate of the gaze point. Left eye.",
+    "validityL": "A boolean indicating whether the data is valid or not. Left eye.",
+    "xR": "The x-coordinate of the gaze point. Right eye.",
+    "yR": "The y-coordinate of the gaze point. Right eye.",
+    "validityR": "A boolean indicating whether the data is valid or not. Right eye.",
+    "timestamp": "The timestamp of the data in seconds.",
+    "fixationId": "The ID of the fixation. This is only present if the data is a fixation. (!!!)",
+    "fixationDuration": "The duration of the fixation in seconds. This is only present if the data is a fixation. (!!!)"
+}
+```
 
-## Name
-Choose a self-explaining name for your project.
+#### 3. `calibrated`
+The `calibrated` message should look like this:
+```json
+{
+  "type": "calibrated"
+}
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Note, this will in the future hold more fields containing calibration data.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+#### 4. `disconnected`
+The `disconnected` message should look like this:
+```json
+{
+  "type": "disconnected"
+}
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+#### 5. `error`
+The `error` message convey when there is an error in the bridge. It should look like this:
+```json
+{
+  "type": "error",
+  "message": "The error message."
+}
+```

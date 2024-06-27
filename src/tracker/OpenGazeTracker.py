@@ -4,23 +4,48 @@ import time
 class OpenGazeTracker:
     """
     Class for connecting to an OpenGaze tracker and receiving data from it.
+
+    :param keep_fixation_data: A boolean indicating whether to keep fixation data or not. If this is False, fixation data is not sent to the client. This is useful for reducing the amount of data sent to the client.
+    :param tcp_host: The host of the tracker. Should be localhost in most cases.
+    :param tcp_port: The port of the tracker.
+    :param data_callback: The callback function to call when data or messages are received from the tracker. These are re-sent to the client via the WebSocket server. It is either gaze point data or calibration data or confirmation that the tracker is connected. The callback function should take a single argument, which is a dictionary with the data or message to send to the client. The data structure in case of a gaze point is as follows:
+        {
+            'xL': The x-coordinate of the gaze point. Left eye.
+            'yL': The y-coordinate of the gaze point. Left eye.
+            'validityL': A boolean indicating whether the data is valid or not. Left eye.
+            'xR': The x-coordinate of the gaze point. Right eye.
+            'yR': The y-coordinate of the gaze point. Right eye.
+            'validityR': A boolean indicating whether the data is valid or not. Right eye.
+            'timestamp': The timestamp of the data in seconds.
+            'type': 'point'
+            'fixationId': The ID of the fixation. This is only present if the data is a fixation. (!!!)
+            'fixationDuration': The duration of the fixation in seconds. This is only present if the data is a fixation. (!!!)
+        }
+    :param reader: The reader object for reading data from the tracker. (asyncio.StreamReader)
+    :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
     """
-    def __init__(self, tcp_host, tcp_port, data_callback):
+    def __init__(self, keep_fixation_data, tcp_host, tcp_port, data_callback):
         self.tcp_host = tcp_host
         self.tcp_port = tcp_port
         self.data_callback = data_callback
         self.reader = None
         self.writer = None
-        self.keep_fixation_data = True # TODO: Implement this
-        self.base_timestamp = time.time()
+        self.keep_fixation_data = keep_fixation_data
+        self.is_paused = False # TODO: Implement pause functionality, which prevents sending point data to the client. Other data should still be sent.
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
         print('Connected to TCP server')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print('Sent commands to tracker')
+
+        # send confirmation message to the client
+        await self.data_callback({'type': 'connected'})
+
         while True:
             data = await self.reader.read(1024)
             if not data:
@@ -90,10 +115,13 @@ class OpenGazeTracker:
         timestamp = time.time()
 
         base_data = {
-            'x': data.get('FPOGX'),
-            'y': data.get('FPOGY'),
+            'xL': data.get('LPOGX'),
+            'yL': data.get('LPOGY'),
+            'validityL': data.get('LPOGV'),
+            'xR': data.get('RPOGX'),
+            'yR': data.get('RPOGY'),
+            'validityR': data.get('RPOGV'),
             'timestamp': timestamp,
-            'deviceValidity': True, # TODO: Implement this via Best POG, BPOGV
             'type': 'point',
         }
 

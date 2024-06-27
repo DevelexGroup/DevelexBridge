@@ -3,11 +3,16 @@ import websockets
 import json
 
 class WebSocketServer:
-    def __init__(self, host, port):
+    """
+    A simple WebSocket server that can send data to all connected clients.
+    Very leightweight implementation just for resending data. It is not responsible for handling the data.
+    """
+    def __init__(self, host, port, received_data_callback):
         self.connected = set()
         self.host = host
         self.port = port
         self.server = None
+        self.received_data_callback = received_data_callback # Callback function to call when data is received from the client. It should take two arguments: the data received (dict) and the WebSocketServer object.
 
     async def start_server(self):
         self.server = await websockets.serve(self.handler, self.host, self.port)
@@ -23,10 +28,33 @@ class WebSocketServer:
         """
         self.connected.add(websocket)
         try:
-            await websocket.wait_closed()
+            await self.process_incoming_messages(websocket)
         finally:
             # Unregister websocket connection
             self.connected.remove(websocket)
+
+
+    async def process_incoming_messages(self, websocket: websockets.WebSocketServerProtocol):
+        """
+        Process incoming messages from the client.
+        This function will run indefinitely and process incoming messages.
+        Messages should be always in JSON format. Ignore any other messages.
+
+        :param websocket: The websocket connection object.
+        """
+        while True:
+            try:
+                data = await websocket.recv()
+                try:
+                    json_data = json.loads(data)
+                    if isinstance(json_data, dict):
+                        await self.received_data_callback(json_data, self)
+                    else:
+                        print(f'Received invalid data from client: {data}')    
+                except json.JSONDecodeError:
+                    print(f'Received invalid data from client: {data}')
+            except websockets.ConnectionClosed:
+                break        
 
     async def send_data(self, data: dict):
         """
