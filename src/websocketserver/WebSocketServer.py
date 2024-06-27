@@ -3,6 +3,10 @@ import websockets
 import json
 
 class WebSocketServer:
+    """
+    A simple WebSocket server that can send data to all connected clients.
+    Very leightweight implementation just for resending data. It is not responsible for handling the data.
+    """
     def __init__(self, host, port):
         self.connected = set()
         self.host = host
@@ -27,6 +31,22 @@ class WebSocketServer:
         finally:
             # Unregister websocket connection
             self.connected.remove(websocket)
+
+
+    async def process_incoming_messages(self, websocket: websockets.WebSocketServerProtocol):
+        """
+        Process incoming messages from the client.
+        This function will run indefinitely and process incoming messages.
+        Messages should be always in JSON format. Ignore any other messages.
+
+        :param websocket: The websocket connection object.
+        """
+        while True:
+            try:
+                data = await websocket.recv()
+                print(f'Received data: {data}')
+            except websockets.ConnectionClosed:
+                break        
 
     async def send_data(self, data: dict):
         """

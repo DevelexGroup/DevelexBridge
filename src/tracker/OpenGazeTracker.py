@@ -4,15 +4,30 @@ import time
 class OpenGazeTracker:
     """
     Class for connecting to an OpenGaze tracker and receiving data from it.
+
+    :param keep_fixation_data: A boolean indicating whether to keep fixation data or not. If this is False, fixation data is not sent to the client. This is useful for reducing the amount of data sent to the client.
+    :param tcp_host: The host of the tracker. Should be localhost in most cases.
+    :param tcp_port: The port of the tracker.
+    :param data_callback: The callback function to call when data or messages are received from the tracker. These are re-sent to the client via the WebSocket server. It is either gaze point data or calibration data or confirmation that the tracker is connected. The callback function should take a single argument, which is a dictionary with the data or message to send to the client. The data structure in case of a gaze point is as follows:
+        {
+            'x': The x-coordinate of the gaze point.
+            'y': The y-coordinate of the gaze point.
+            'timestamp': The timestamp of the data in seconds.
+            'deviceValidity': A boolean indicating whether the data is valid or not. If the data is a calibration point, this is always True.
+            'type': The type of the data. This is either 'point' for gaze point data or 'calibration' for calibration data.
+            'fixationId': The ID of the fixation. This is only present if the data is a fixation.
+            'fixationDuration': The duration of the fixation in seconds. This is only present if the data is a fixation.
+        }
+    :param reader: The reader object for reading data from the tracker. (asyncio.StreamReader)
+    :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
     """
-    def __init__(self, tcp_host, tcp_port, data_callback):
+    def __init__(self, keep_fixation_data, tcp_host, tcp_port, data_callback):
         self.tcp_host = tcp_host
         self.tcp_port = tcp_port
         self.data_callback = data_callback
         self.reader = None
         self.writer = None
-        self.keep_fixation_data = True # TODO: Implement this
-        self.base_timestamp = time.time()
+        self.keep_fixation_data = keep_fixation_data
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
