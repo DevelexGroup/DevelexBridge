@@ -69,7 +69,7 @@ class OpenGazeTracker:
 
         Parse OpenGaze API XML data and return a dictionary with the relevant data.
         After parsing to the text, they look like this:
-        <REC FPOGX="0.29043" FPOGY="0.65331" FPOGS="23457.68164" FPOGD="0.19727" FPOGID="12072" FPOGV="1" />\r\n
+        '<REC FPOGX="0.00000" FPOGY="0.00000" FPOGS="0.00000" FPOGD="0.00000" FPOGID="0" FPOGV="0" LPOGX="0.00000" LPOGY="0.00000" LPOGV="0" RPOGX="0.00000" RPOGY="0.00000" RPOGV="0" />\r\n'
 
         :param data: The data received from the tracker.
         """
