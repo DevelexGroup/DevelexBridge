@@ -10,13 +10,16 @@ class OpenGazeTracker:
     :param tcp_port: The port of the tracker.
     :param data_callback: The callback function to call when data or messages are received from the tracker. These are re-sent to the client via the WebSocket server. It is either gaze point data or calibration data or confirmation that the tracker is connected. The callback function should take a single argument, which is a dictionary with the data or message to send to the client. The data structure in case of a gaze point is as follows:
         {
-            'x': The x-coordinate of the gaze point.
-            'y': The y-coordinate of the gaze point.
+            'xL': The x-coordinate of the gaze point. Left eye.
+            'yL': The y-coordinate of the gaze point. Left eye.
+            'validityL': A boolean indicating whether the data is valid or not. Left eye.
+            'xR': The x-coordinate of the gaze point. Right eye.
+            'yR': The y-coordinate of the gaze point. Right eye.
+            'validityR': A boolean indicating whether the data is valid or not. Right eye.
             'timestamp': The timestamp of the data in seconds.
-            'deviceValidity': A boolean indicating whether the data is valid or not. If the data is a calibration point, this is always True.
             'type': The type of the data. This is either 'point' for gaze point data or 'calibration' for calibration data.
-            'fixationId': The ID of the fixation. This is only present if the data is a fixation.
-            'fixationDuration': The duration of the fixation in seconds. This is only present if the data is a fixation.
+            'fixationId': The ID of the fixation. This is only present if the data is a fixation. (!!!)
+            'fixationDuration': The duration of the fixation in seconds. This is only present if the data is a fixation. (!!!)
         }
     :param reader: The reader object for reading data from the tracker. (asyncio.StreamReader)
     :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
@@ -34,6 +37,8 @@ class OpenGazeTracker:
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
         print('Connected to TCP server')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print('Sent commands to tracker')
@@ -110,10 +115,13 @@ class OpenGazeTracker:
         timestamp = time.time()
 
         base_data = {
-            'x': data.get('FPOGX'),
-            'y': data.get('FPOGY'),
+            'xL': data.get('LPOGX'),
+            'yL': data.get('LPOGY'),
+            'validityL': data.get('LPOGV'),
+            'xR': data.get('RPOGX'),
+            'yR': data.get('RPOGY'),
+            'validityR': data.get('RPOGV'),
             'timestamp': timestamp,
-            'deviceValidity': True, # TODO: Implement this via Best POG, BPOGV
             'type': 'point',
         }
 
