@@ -28,6 +28,7 @@ class OpenGazeTracker:
         self.reader = None
         self.writer = None
         self.keep_fixation_data = keep_fixation_data
+        self.is_paused = False # TODO: Implement pause functionality, which prevents sending point data to the client. Other data should still be sent.
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(self.tcp_host, self.tcp_port)
@@ -36,6 +37,10 @@ class OpenGazeTracker:
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print('Sent commands to tracker')
+
+        # send confirmation message to the client
+        await self.data_callback({'type': 'connected'})
+
         while True:
             data = await self.reader.read(1024)
             if not data:

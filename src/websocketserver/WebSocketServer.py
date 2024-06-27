@@ -7,11 +7,12 @@ class WebSocketServer:
     A simple WebSocket server that can send data to all connected clients.
     Very leightweight implementation just for resending data. It is not responsible for handling the data.
     """
-    def __init__(self, host, port):
+    def __init__(self, host, port, received_data_callback):
         self.connected = set()
         self.host = host
         self.port = port
         self.server = None
+        self.received_data_callback = received_data_callback # Callback function to call when data is received from the client. It should take two arguments: the data received (dict) and the WebSocketServer object.
 
     async def start_server(self):
         self.server = await websockets.serve(self.handler, self.host, self.port)
@@ -27,7 +28,7 @@ class WebSocketServer:
         """
         self.connected.add(websocket)
         try:
-            await websocket.wait_closed()
+            await self.process_incoming_messages(websocket)
         finally:
             # Unregister websocket connection
             self.connected.remove(websocket)
@@ -44,7 +45,14 @@ class WebSocketServer:
         while True:
             try:
                 data = await websocket.recv()
-                print(f'Received data: {data}')
+                try:
+                    json_data = json.loads(data)
+                    if isinstance(json_data, dict):
+                        await self.received_data_callback(json_data, self)
+                    else:
+                        print(f'Received invalid data from client: {data}')    
+                except json.JSONDecodeError:
+                    print(f'Received invalid data from client: {data}')
             except websockets.ConnectionClosed:
                 break        
 
