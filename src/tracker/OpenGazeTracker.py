@@ -17,7 +17,7 @@ class OpenGazeTracker:
             'yR': The y-coordinate of the gaze point. Right eye.
             'validityR': A boolean indicating whether the data is valid or not. Right eye.
             'timestamp': The timestamp of the data in seconds.
-            'type': The type of the data. This is either 'point' for gaze point data or 'calibration' for calibration data.
+            'type': 'point'
             'fixationId': The ID of the fixation. This is only present if the data is a fixation. (!!!)
             'fixationDuration': The duration of the fixation in seconds. This is only present if the data is a fixation. (!!!)
         }
