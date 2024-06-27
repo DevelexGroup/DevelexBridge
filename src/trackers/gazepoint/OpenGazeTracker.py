@@ -1,10 +1,11 @@
 import asyncio
 import time
 from typing import Callable, Any, Coroutine, Optional
+from trackers.Tracker import Tracker
 from websocketserver.WebSocketServer import WebSocketServer
 
 
-class OpenGazeTracker:
+class OpenGazeTracker(Tracker):
     """
     Class for connecting to an OpenGaze tracker and receiving data from it.
 
@@ -30,6 +31,7 @@ class OpenGazeTracker:
 
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
+    is_paused: bool
 
     def __init__(
         self,
@@ -44,7 +46,7 @@ class OpenGazeTracker:
         self.reader = None
         self.writer = None
         self.keep_fixation_data = keep_fixation_data
-        self.is_paused = False  # TODO: Implement pause functionality, which prevents sending point data to the client. Other data should still be sent.
+        self.is_paused = False
 
     async def connect(self) -> None:
         try:
@@ -65,8 +67,9 @@ class OpenGazeTracker:
         # send confirmation message to the client
         await self.data_callback({"type": "connected"})
 
+    async def start(self) -> None:
         while True:
-            if self.reader is None:
+            if self.reader is None or self.is_paused is True:
                 break
 
             data = await self.reader.read(1024)
@@ -76,6 +79,31 @@ class OpenGazeTracker:
 
             print(f"Received: {data.decode()!r}")
             await self.decode_data(data)
+
+    def stop(self) -> None:
+        # Send ENABLE_SEND_DATA with 0?
+        self.is_paused = True
+
+    async def calibrate(self) -> None:
+        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" VALUE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="CALIBRATE_START" VALUE="1" />\r\n')
+
+        data = await self.reader.read(1024)
+
+        if not data:
+            self.data_callback(
+                {
+                    "type": "error",
+                    "message": "No calibration data received from tracker",
+                }
+            )
+            return
+
+        print(f"Recieved: {data.decode()!r}")
+        await self.decode_data(data)
+
+        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" VALUE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="CALIBRATE_START" VALUE="0" />\r\n')
 
     async def send_to_tracker(self, command: str) -> None:
         if self.writer is None:
@@ -90,6 +118,7 @@ class OpenGazeTracker:
 
         self.writer.close()
         await self.writer.wait_closed()
+        self.is_paused = True
 
     async def decode_data(self, data: bytes) -> None:
         """
