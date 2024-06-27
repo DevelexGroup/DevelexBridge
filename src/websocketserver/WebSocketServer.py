@@ -1,77 +1,73 @@
 import asyncio
 import websockets
 import json
+from typing import Optional, Set, Any, Callable, Awaitable
+
 
 class WebSocketServer:
-    """
-    A simple WebSocket server that can send data to all connected clients.
-    Very leightweight implementation just for resending data. It is not responsible for handling the data.
-    """
-    def __init__(self, host, port, received_data_callback):
+    connected: Set[websockets.WebSocketServerProtocol]
+    host: str
+    port: int
+    server: Optional[websockets.WebSocketServer]
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        received_data_callback: Callable[
+            [dict[Any, Any], "WebSocketServer"], Awaitable[None]
+        ],
+    ):
         self.connected = set()
         self.host = host
         self.port = port
         self.server = None
-        self.received_data_callback = received_data_callback # Callback function to call when data is received from the client. It should take two arguments: the data received (dict) and the WebSocketServer object.
+        self.received_data_callback = received_data_callback  # Callback function to call when data is received from the client. It should take two arguments: the data received (dict) and the WebSocketServer object.
 
-    async def start_server(self):
+    async def start_server(self) -> None:
         self.server = await websockets.serve(self.handler, self.host, self.port)
-        print(f'WebSocket server started on {self.host}:{self.port}')
 
-    async def handler(self, websocket: websockets.WebSocketServerProtocol):
-        """
-        Handler for incoming websocket connections.
-        This function will run for each connected client.
-        It will wait for the client to disconnect and then unregister the client.
+        print(f"WebSocket server started on {self.host}:{self.port}")
 
-        :param websocket: The websocket connection object.
-        """
+    async def handler(self, websocket: websockets.WebSocketServerProtocol) -> None:
         self.connected.add(websocket)
+
         try:
             await self.process_incoming_messages(websocket)
         finally:
             # Unregister websocket connection
             self.connected.remove(websocket)
 
-
-    async def process_incoming_messages(self, websocket: websockets.WebSocketServerProtocol):
-        """
-        Process incoming messages from the client.
-        This function will run indefinitely and process incoming messages.
-        Messages should be always in JSON format. Ignore any other messages.
-
-        :param websocket: The websocket connection object.
-        """
+    async def process_incoming_messages(
+        self, websocket: websockets.WebSocketServerProtocol
+    ) -> None:
         while True:
             try:
                 data = await websocket.recv()
+
                 try:
                     json_data = json.loads(data)
                     if isinstance(json_data, dict):
                         await self.received_data_callback(json_data, self)
                     else:
-                        print(f'Received invalid data from client: {data}')    
+                        print(f"Received invalid data from client: {str(data)}")
                 except json.JSONDecodeError:
-                    print(f'Received invalid data from client: {data}')
+                    print(f"Received invalid data from client: {str(data)}")
             except websockets.ConnectionClosed:
-                break        
+                break
 
-    async def send_data(self, data: dict):
-        """
-        Send data to all connected clients.
-        If no clients are connected, it won't send anything. (i.e. it won't wait for clients to connect)
+    async def send_data(self, data: dict[Any, Any]) -> None:
+        print(f"Sending data to {len(self.connected)} clients")
 
-        :param data: The data to send to the clients. It should be a dictionary that can be converted to JSON.
-        """
         json_data = json.dumps(data)
-        print(f'Sending data to {len(self.connected)} clients')
         await asyncio.gather(*(ws.send(json_data) for ws in self.connected if ws.open))
 
-    async def close(self):
-        """
-        Close all connected websockets and the server.
-        """
+    async def close(self) -> None:
         for ws in self.connected:
             await ws.close()
+
+        if self.server is None:
+            return
+
         self.server.close()
         await self.server.wait_closed()
