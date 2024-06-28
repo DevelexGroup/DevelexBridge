@@ -29,6 +29,7 @@ class OpenGazeTracker(Tracker):
     :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
     """
 
+    _model: str = "opengaze"
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
     is_paused: bool
@@ -85,13 +86,16 @@ class OpenGazeTracker(Tracker):
         self.is_paused = True
 
     async def calibrate(self) -> None:
+        if self.reader is None:
+            return
+
         await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" VALUE="1" />\r\n')
         await self.send_to_tracker('<SET ID="CALIBRATE_START" VALUE="1" />\r\n')
 
         data = await self.reader.read(1024)
 
         if not data:
-            self.data_callback(
+            await self.data_callback(
                 {
                     "type": "error",
                     "message": "No calibration data received from tracker",

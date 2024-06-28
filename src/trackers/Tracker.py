@@ -2,22 +2,29 @@ from abc import ABC, abstractmethod
 
 
 class Tracker(ABC):
+    _model: str
+
+    @property
     @abstractmethod
-    def connect(self):
+    def model(self) -> str:
         pass
 
     @abstractmethod
-    def start(self):
+    def connect(self) -> None:
         pass
 
     @abstractmethod
-    def stop(self):
+    def start(self) -> None:
         pass
 
     @abstractmethod
-    def calibrate(self):
+    def stop(self) -> None:
         pass
 
     @abstractmethod
-    def disconnect(self):
+    def calibrate(self) -> None:
+        pass
+
+    @abstractmethod
+    def disconnect(self) -> None:
         pass
