@@ -36,7 +36,7 @@ def on_connect_callback(
             return
 
 
-def on_start_callback(
+async def on_start_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
@@ -45,7 +45,7 @@ def on_start_callback(
         print("No tracker connected")
         return
 
-    tracker.start()
+    await asyncio.create_task(tracker.start())
 
 
 def on_stop_callback(
@@ -112,22 +112,6 @@ async def received_data_callback(
     except jsonschema.exceptions.ValidationError as e:
         print(f"Validation error: {e.message}")
         return
-
-
-async def handle_received_config_data(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
-) -> None:
-    print(f"Received configuration data from client: {data}")
-    global tracker
-    if tracker is not None:
-        tracker.disconnect()
-
-    data_callback_partial = lambda data: data_callback(websocket_server, data)
-    tracker = OpenGazeTracker.OpenGazeTracker(
-        True, "localhost", 4242, data_callback_partial
-    )
-
-    await asyncio.create_task(tracker.connect())
 
 
 async def main() -> None:
