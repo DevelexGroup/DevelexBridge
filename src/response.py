@@ -1,7 +1,7 @@
 from typing import Any
 
 
-def response(_type: str, data: dict[Any, Any]) -> dict[Any, Any]:
+def response(_type: str, data: dict[Any, Any] = {}) -> dict[Any, Any]:
     return {**data, "type": _type}
 
 
