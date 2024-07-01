@@ -4,14 +4,16 @@ import jsonschema.exceptions
 import validationSchemas as va
 
 from websocketserver import WebSocketServer
-from trackers.gazepoint import OpenGazeTracker
+from trackers.gazepoint.OpenGazeTracker import OpenGazeTracker
+from trackers.smi.SMITracker import SMITracker
+from trackers.eyelogic.ELTracker import ELTracker
 from typing import Any
 
 
 tracker = None
 
 
-def on_connect_callback(
+async def on_connect_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
@@ -23,14 +25,22 @@ def on_connect_callback(
             if tracker is not None:
                 tracker.disconnect()
 
-            tracker = OpenGazeTracker.OpenGazeTracker(
+            tracker = OpenGazeTracker(
                 data["keepFixations"],
                 "localhost",
                 4242,
                 lambda data: data_callback(websocket_server, data),
             )
 
-            tracker.connect()
+            await tracker.connect()
+        case "smi":
+            tracker = SMITracker(lambda data: data_callback(websocket_server, data))
+
+            await tracker.connect()
+        case "eyelogic":
+            tracker = ELTracker(lambda data: data_callback(websocket_server, data))
+
+            await tracker.connect()
         case _:
             print("Unsupported tracker type")
             return
@@ -60,7 +70,7 @@ def on_stop_callback(
     tracker.stop()
 
 
-def on_calibrate_callback(
+async def on_calibrate_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
@@ -69,10 +79,10 @@ def on_calibrate_callback(
         print("No tracker connected")
         return
 
-    tracker.calibrate()
+    await tracker.calibrate()
 
 
-def on_disconnect_callback(
+async def on_disconnect_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
@@ -81,7 +91,7 @@ def on_disconnect_callback(
         print("No tracker connected")
         return
 
-    tracker.disconnect()
+    await tracker.disconnect()
 
 
 # TODO: maybe with decorators?
