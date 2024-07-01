@@ -81,7 +81,7 @@ class SMITracker(Tracker):
                     "yL": sample.leftEye.gazeY,
                     "xR": sample.rightEye.gazeX,
                     "yR": sample.rightEye.gazeY,
-                    "timestamp": sample.timestamp,
+                    "timestamp": sample.timestamp / 1000000,
                 },
             )
         )
