@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 
 
 class Tracker(ABC):
-    _model: str
-
     @property
     @abstractmethod
     def model(self) -> str:
