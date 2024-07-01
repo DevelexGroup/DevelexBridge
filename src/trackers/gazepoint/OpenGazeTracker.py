@@ -29,7 +29,7 @@ class OpenGazeTracker(Tracker):
     :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
     """
 
-    _model: str = "opengaze"
+    __model: str = "opengaze"
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
     is_paused: bool
@@ -193,3 +193,7 @@ class OpenGazeTracker(Tracker):
             base_data["fixationDuration"] = float(str(data.get("FPOGD")))
 
         return base_data
+
+    @property
+    def model(self) -> str:
+        return self.__model

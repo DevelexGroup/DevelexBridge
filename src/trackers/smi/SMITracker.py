@@ -10,7 +10,7 @@ except Exception:
 
 
 class SMITracker(Tracker):
-    _model: str = "smi"
+    __model: str = "smi"
 
     def __init__(self, data_callback: Callable[[Any], Coroutine[Any, Any, None]]):
         self.api = iViewXAPI.iViewXAPI
@@ -53,7 +53,7 @@ class SMITracker(Tracker):
         else:
             await self.data_callback(response.error_response(message))
 
-    def start(self) -> None:
+    async def start(self) -> None:
         self.paused = False
 
     def stop(self) -> None:
@@ -87,3 +87,7 @@ class SMITracker(Tracker):
         )
 
         return 0
+
+    @property
+    def model(self) -> str:
+        return self.__model

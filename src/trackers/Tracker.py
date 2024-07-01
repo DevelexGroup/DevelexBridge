@@ -8,11 +8,11 @@ class Tracker(ABC):
         pass
 
     @abstractmethod
-    def connect(self) -> None:
+    async def connect(self) -> None:
         pass
 
     @abstractmethod
-    def start(self) -> None:
+    async def start(self) -> None:
         pass
 
     @abstractmethod
@@ -20,9 +20,9 @@ class Tracker(ABC):
         pass
 
     @abstractmethod
-    def calibrate(self) -> None:
+    async def calibrate(self) -> None:
         pass
 
     @abstractmethod
-    def disconnect(self) -> None:
+    async def disconnect(self) -> None:
         pass
