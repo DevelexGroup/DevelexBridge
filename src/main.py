@@ -2,6 +2,7 @@ import asyncio
 import jsonschema
 import jsonschema.exceptions
 import validationSchemas as va
+import response
 
 from websocketserver import WebSocketServer
 from trackers.gazepoint.OpenGazeTracker import OpenGazeTracker
@@ -13,10 +14,22 @@ from typing import Any
 tracker = None
 
 
+async def handle_no_tracker(websocket_server: WebSocketServer) -> None:
+    await data_callback(
+        websocket_server, response.error_response("No tracker connected")
+    )
+
+    print("No tracker connected")
+
+
 async def on_connect_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
+
+    if tracker is None:
+        handle_no_tracker(websocket_server)
+        return
 
     jsonschema.validate(data, va.CONNECT_SCHEMA)
 
@@ -42,6 +55,9 @@ async def on_connect_callback(
 
             await tracker.connect()
         case _:
+            await data_callback(
+                websocket_server, response.error_response("Unsupported tracker type")
+            )
             print("Unsupported tracker type")
             return
 
@@ -52,7 +68,7 @@ async def on_start_callback(
     global tracker
 
     if tracker is None:
-        print("No tracker connected")
+        handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.start())
@@ -64,10 +80,11 @@ async def on_stop_callback(
     global tracker
 
     if tracker is None:
-        print("No tracker connected")
+        handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.stop())
+
 
 async def on_calibrate_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
@@ -75,7 +92,7 @@ async def on_calibrate_callback(
     global tracker
 
     if tracker is None:
-        print("No tracker connected")
+        handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.calibrate())
@@ -87,7 +104,7 @@ async def on_disconnect_callback(
     global tracker
 
     if tracker is None:
-        print("No tracker connected")
+        handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.disconnect())
@@ -119,6 +136,7 @@ async def received_data_callback(
 
         asyncio.create_task(MESSAGE_CALLBACKS[data["type"]](data, websocket_server))
     except jsonschema.exceptions.ValidationError as e:
+        await data_callback(websocket_server, response.error_response(e.message))
         print(f"Validation error: {e.message}")
         return
 
