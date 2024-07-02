@@ -4,7 +4,7 @@ import jsonschema.exceptions
 import validationSchemas as va
 import response
 
-from websocketserver import WebSocketServer
+from websocketserver.WebSocketServer import WebSocketServer
 from trackers.gazepoint.OpenGazeTracker import OpenGazeTracker
 from trackers.smi.SMITracker import SMITracker
 from trackers.eyelogic.ELTracker import ELTracker
@@ -23,12 +23,12 @@ async def handle_no_tracker(websocket_server: WebSocketServer) -> None:
 
 
 async def on_connect_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     global tracker
 
     if tracker is None:
-        handle_no_tracker(websocket_server)
+        await handle_no_tracker(websocket_server)
         return
 
     jsonschema.validate(data, va.CONNECT_SCHEMA)
@@ -63,48 +63,48 @@ async def on_connect_callback(
 
 
 async def on_start_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     global tracker
 
     if tracker is None:
-        handle_no_tracker(websocket_server)
+        await handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.start())
 
 
 async def on_stop_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     global tracker
 
     if tracker is None:
-        handle_no_tracker(websocket_server)
+        await handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.stop())
 
 
 async def on_calibrate_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     global tracker
 
     if tracker is None:
-        handle_no_tracker(websocket_server)
+        await handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.calibrate())
 
 
 async def on_disconnect_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     global tracker
 
     if tracker is None:
-        handle_no_tracker(websocket_server)
+        await handle_no_tracker(websocket_server)
         return
 
     await asyncio.create_task(tracker.disconnect())
@@ -121,13 +121,13 @@ MESSAGE_CALLBACKS = {
 
 
 async def data_callback(
-    websocket_server: WebSocketServer.WebSocketServer, data: dict[Any, Any]
+    websocket_server: WebSocketServer, data: dict[Any, Any]
 ) -> None:
     await websocket_server.send_data(data)
 
 
 async def received_data_callback(
-    data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
+    data: dict[Any, Any], websocket_server: WebSocketServer
 ) -> None:
     print(f"Received data from client: {data}")
 
@@ -142,9 +142,7 @@ async def received_data_callback(
 
 
 async def main() -> None:
-    websocket_server = WebSocketServer.WebSocketServer(
-        "localhost", 13892, received_data_callback
-    )
+    websocket_server = WebSocketServer("localhost", 13892, received_data_callback)
 
     print("Starting bridge...")
 
