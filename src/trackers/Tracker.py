@@ -16,7 +16,7 @@ class Tracker(ABC):
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         pass
 
     @abstractmethod

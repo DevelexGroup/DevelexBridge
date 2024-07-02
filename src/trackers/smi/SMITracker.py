@@ -56,7 +56,7 @@ class SMITracker(Tracker):
     async def start(self) -> None:
         self.paused = False
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self.paused = True
 
     async def calibrate(self) -> None:

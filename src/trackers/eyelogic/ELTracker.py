@@ -14,7 +14,7 @@ except Exception:
 
 
 class ELTracker(Tracker):
-    _model: str = "eyelogic"
+    __model: str = "eyelogic"
     __sample_callback = Optional[EL.GazeSampleCallback]
     __event_callback = Optional[EL.EventCallback]
 
@@ -58,7 +58,7 @@ class ELTracker(Tracker):
             await self.data_callback(response.error_response(message))
             return
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self.api.unrequestTracking()
 
     @property
