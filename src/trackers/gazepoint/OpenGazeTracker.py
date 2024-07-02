@@ -3,6 +3,7 @@ import time
 from typing import Callable, Any, Coroutine, Optional
 from trackers.Tracker import Tracker
 from websocketserver.WebSocketServer import WebSocketServer
+import response
 
 
 class OpenGazeTracker(Tracker):
@@ -55,12 +56,12 @@ class OpenGazeTracker(Tracker):
                 self.tcp_host, self.tcp_port
             )
         except ConnectionRefusedError:
-            await self.data_callback({"type": "error", "message": "Connection refused"})
+            await self.data_callback(response.error_response("Connection refused"))
 
         print("Connected to TCP server")
 
         # send confirmation message to the client
-        await self.data_callback({"type": "connected"})
+        await self.data_callback(response.response("connected"))
 
     async def start(self) -> None:
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
@@ -69,11 +70,11 @@ class OpenGazeTracker(Tracker):
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print("Sent commands to tracker")
-        await self.data_callback({"type": "started"})
+        await self.data_callback(response.response("started"))
         self.is_paused = False
 
         # send confirmation message to the client
-        await self.data_callback({"type": "connected"})
+        await self.data_callback(response.response("connected"))
 
         while True:
             if self.reader is None or self.is_paused is True:
@@ -94,7 +95,7 @@ class OpenGazeTracker(Tracker):
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
         self.is_paused = True
-        await self.data_callback({"type": "stopped"})
+        await self.data_callback(response.response("stopped"))
 
     async def calibrate(self) -> None:
         if self.reader is None:
@@ -107,10 +108,7 @@ class OpenGazeTracker(Tracker):
 
         if not data:
             await self.data_callback(
-                {
-                    "type": "error",
-                    "message": "No calibration data received from tracker",
-                }
+                response.error_response("No calibration data received from tracker")
             )
             return
 
@@ -132,7 +130,7 @@ class OpenGazeTracker(Tracker):
             return
         self.writer.close()
         await self.writer.wait_closed()
-        await self.data_callback({"type": "disconnected"})
+        await self.data_callback(response.response("disconnected"))
 
     async def decode_data(self, data: bytes) -> None:
         """
