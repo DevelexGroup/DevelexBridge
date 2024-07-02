@@ -58,7 +58,7 @@ async def on_start_callback(
     await asyncio.create_task(tracker.start())
 
 
-def on_stop_callback(
+async def on_stop_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
 ) -> None:
     global tracker
@@ -67,8 +67,7 @@ def on_stop_callback(
         print("No tracker connected")
         return
 
-    tracker.stop()
-
+    await asyncio.create_task(tracker.stop())
 
 async def on_calibrate_callback(
     data: dict[Any, Any], websocket_server: WebSocketServer.WebSocketServer
@@ -79,7 +78,7 @@ async def on_calibrate_callback(
         print("No tracker connected")
         return
 
-    await tracker.calibrate()
+    await asyncio.create_task(tracker.calibrate())
 
 
 async def on_disconnect_callback(
@@ -91,7 +90,7 @@ async def on_disconnect_callback(
         print("No tracker connected")
         return
 
-    await tracker.disconnect()
+    await asyncio.create_task(tracker.disconnect())
 
 
 # TODO: maybe with decorators?
@@ -118,7 +117,7 @@ async def received_data_callback(
     try:
         jsonschema.validate(data, va.BASE_SCHEMA)
 
-        await MESSAGE_CALLBACKS[data["type"]](data, websocket_server)
+        asyncio.create_task(MESSAGE_CALLBACKS[data["type"]](data, websocket_server))
     except jsonschema.exceptions.ValidationError as e:
         print(f"Validation error: {e.message}")
         return
