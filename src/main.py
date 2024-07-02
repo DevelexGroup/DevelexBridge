@@ -118,7 +118,7 @@ async def received_data_callback(
     try:
         jsonschema.validate(data, va.BASE_SCHEMA)
 
-        MESSAGE_CALLBACKS[data["type"]](data, websocket_server)
+        await MESSAGE_CALLBACKS[data["type"]](data, websocket_server)
     except jsonschema.exceptions.ValidationError as e:
         print(f"Validation error: {e.message}")
         return
