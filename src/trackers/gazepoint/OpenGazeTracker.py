@@ -58,17 +58,23 @@ class OpenGazeTracker(Tracker):
             await self.data_callback({"type": "error", "message": "Connection refused"})
 
         print("Connected to TCP server")
+
+        # send confirmation message to the client
+        await self.data_callback({"type": "connected"})
+
+    async def start(self) -> None:
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         print("Sent commands to tracker")
+        await self.data_callback({"type": "started"})
+        self.is_paused = False
 
         # send confirmation message to the client
         await self.data_callback({"type": "connected"})
 
-    async def start(self) -> None:
         while True:
             if self.reader is None or self.is_paused is True:
                 break
@@ -81,9 +87,14 @@ class OpenGazeTracker(Tracker):
             print(f"Received: {data.decode()!r}")
             await self.decode_data(data)
 
-    def stop(self) -> None:
-        # Send ENABLE_SEND_DATA with 0?
+    async def stop(self) -> None:
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="0" />\r\n')
+        # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
         self.is_paused = True
+        await self.data_callback({"type": "stopped"})
 
     async def calibrate(self) -> None:
         if self.reader is None:
@@ -119,10 +130,9 @@ class OpenGazeTracker(Tracker):
     async def disconnect(self) -> None:
         if self.writer is None:
             return
-
         self.writer.close()
         await self.writer.wait_closed()
-        self.is_paused = True
+        await self.data_callback({"type": "disconnected"})
 
     async def decode_data(self, data: bytes) -> None:
         """
@@ -146,23 +156,35 @@ class OpenGazeTracker(Tracker):
                 parts = [part for part in line.split(" ") if part]
 
                 # If empty, skip
-                if not parts:
+                if len(parts) < 2:
+                    print(f"Skipping invalid or empty line: {line}")
                     continue
 
-                # Remove <REC and /> from first and last parts
-                parts.pop(0)
-                parts.pop(-1)
+                try:
+                    # Remove <REC and /> from first and last parts
+                    if parts[0].startswith("<REC"):
+                        parts.pop(0)
+                    if parts[-1].endswith("/>"):
+                        parts.pop(-1)
 
-                for part in parts:
-                    # Split by = and remove empty strings
-                    key, value = [x for x in part.split("=") if x]
-                    # Remove quotes from value
-                    value = value.strip('"')
-                    data_dict[key] = value
+                    for part in parts:
+                        # Split by = and remove empty strings
+                        key_value = [x for x in part.split("=") if x]
+                        if len(key_value) != 2:
+                            print(f"Skipping invalid part: {part}")
+                            continue
+                        key, value = key_value
+                        # Remove quotes from value
+                        value = value.strip('"')
+                        data_dict[key] = value
 
-                parsed_data = self.parse_rec(data_dict)
-                print(parsed_data)
-                await self.data_callback(parsed_data)
+                    parsed_data = self.parse_rec(data_dict)
+                    print(parsed_data)
+                    await self.data_callback(parsed_data)
+                except IndexError as e:
+                    print(f"IndexError: {e} - Line: {line} - Parts: {parts}")
+                except Exception as e:
+                    print(f"Unexpected error in decode_data: {e}")
 
     def parse_rec(self, data: dict[Any, Any]) -> dict[str, Any]:
         """
