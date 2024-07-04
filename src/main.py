@@ -47,7 +47,10 @@ async def on_connect_callback(
 
             await tracker.connect()
         case "eyelogic":
-            tracker = ELTracker(lambda data: data_callback(websocket_server, data))
+            tracker = ELTracker(
+                lambda data: data_callback(websocket_server, data),
+                asyncio.get_event_loop(),
+            )
 
             await tracker.connect()
         case _:

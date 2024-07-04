@@ -6,6 +6,7 @@ from .ELApiExtension import (
     handle_start_return,
     handle_calibrate_return,
 )
+import asyncio
 
 try:
     import eyelogic.ELApi as EL
@@ -18,13 +19,18 @@ class ELTracker(Tracker):
     __sample_callback = Optional[EL.GazeSampleCallback]
     __event_callback = Optional[EL.EventCallback]
 
-    def __init__(self, data_callback: Callable[[Any], Coroutine[Any, Any, None]]):
+    def __init__(
+        self,
+        data_callback: Callable[[Any], Coroutine[Any, Any, None]],
+        loop: asyncio.AbstractEventLoop,
+    ):
         self.data_callback = data_callback
         self.__sample_callback = None
         self.__event_callback = None
-        self.api = EL.ELApi("Develex client")
+        self.api = EL.ELApi("Develex")
         self.api.registerEventCallback(self.get_event_callback())
         self.api.registerGazeSampleCallback(self.get_sample_callback())
+        self.loop = loop
 
     async def connect(self) -> None:
         success, message = handle_connect_return(self.api.connect())
@@ -43,7 +49,7 @@ class ELTracker(Tracker):
         await self.data_callback(response.response("disconnected"))
 
     async def calibrate(self) -> None:
-        success, message = handle_calibrate_return(self.api.calibrate())
+        success, message = handle_calibrate_return(self.api.calibrate(0))
 
         if not success:
             await self.data_callback(response.error_response(message))
@@ -71,18 +77,10 @@ class ELTracker(Tracker):
 
     def get_sample_callback(self) -> EL.GazeSampleCallback:
         @EL.GazeSampleCallback
-        async def gaze_sample_callback(sample: POINTER(EL.ELGazeSample)) -> None:  # type: ignore
-            await self.data_callback(
-                response.response(
-                    "point",
-                    {
-                        "xL": sample.contents.porLeftX,
-                        "yL": sample.contents.porLeftY,
-                        "xR": sample.contents.porRawX,
-                        "yR": sample.contents.porRawY,
-                        "timestamp": sample.contents.time / 1000000,
-                    },
-                )
+        def gaze_sample_callback(sample: EL.POINTER(EL.ELGazeSample)) -> None:  # type: ignore
+            asyncio.run_coroutine_threadsafe(
+                self.send_callback_data(sample),
+                self.loop,
             )
 
         if self.__sample_callback is None:
@@ -90,11 +88,24 @@ class ELTracker(Tracker):
 
         return self.__sample_callback
 
+    async def send_callback_data(self, sample: EL.POINTER(EL.ELGazeSample)):  # type: ignore
+        await self.data_callback(
+            response.response(
+                "point",
+                {
+                    "xL": sample.contents.porLeftX,
+                    "yL": sample.contents.porLeftY,
+                    "xR": sample.contents.porRawX,
+                    "yR": sample.contents.porRawY,
+                    "timestamp": sample.contents.timestampMicroSec / 1000000,
+                },
+            )
+        )
+
     def get_event_callback(self) -> EL.EventCallback:
         @EL.EventCallback
-        def event_callback(event_ptr: POINTER(EL.ELEvent)) -> None:  # type: ignore
-            event = EL.ELEvent(event_ptr)
-
+        def event_callback(event: EL.ELEvent) -> None:  # type: ignore
+            print("event")
             if event == EL.ELEvent.CONNECTION_CLOSED:
                 self.api.registerGazeSampleCallback(None)
                 self.api.registerEventCallback(None)
