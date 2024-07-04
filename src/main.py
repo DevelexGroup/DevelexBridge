@@ -27,10 +27,6 @@ async def on_connect_callback(
 ) -> None:
     global tracker
 
-    if tracker is None:
-        await handle_no_tracker(websocket_server)
-        return
-
     jsonschema.validate(data, va.CONNECT_SCHEMA)
 
     match data["tracker"]:
