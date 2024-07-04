@@ -8,10 +8,12 @@ from websocketserver.WebSocketServer import WebSocketServer
 from trackers.gazepoint.OpenGazeTracker import OpenGazeTracker
 from trackers.smi.SMITracker import SMITracker
 from trackers.eyelogic.ELTracker import ELTracker
-from typing import Any
+from trackers.dummy.DummyTracker import DummyTracker
+from trackers.Tracker import Tracker
+from typing import Any, Optional
 
 
-tracker = None
+tracker: Optional[Tracker] = None
 
 
 async def handle_no_tracker(websocket_server: WebSocketServer) -> None:
@@ -32,7 +34,7 @@ async def on_connect_callback(
     match data["tracker"]:
         case "opengaze":
             if tracker is not None:
-                tracker.disconnect()
+                await tracker.disconnect()
 
             tracker = OpenGazeTracker(
                 data["keepFixations"],
@@ -43,13 +45,33 @@ async def on_connect_callback(
 
             await tracker.connect()
         case "smi":
-            tracker = SMITracker(lambda data: data_callback(websocket_server, data))
+            if tracker is not None:
+                await tracker.disconnect()
+
+            tracker = SMITracker(
+                lambda data: data_callback(websocket_server, data),
+                asyncio.get_event_loop(),
+            )
 
             await tracker.connect()
         case "eyelogic":
+            if tracker is not None:
+                await tracker.disconnect()
+
             tracker = ELTracker(
                 lambda data: data_callback(websocket_server, data),
                 asyncio.get_event_loop(),
+            )
+
+            await tracker.connect()
+        case "dummy":
+            if tracker is not None:
+                await tracker.disconnect()
+
+            tracker = DummyTracker(
+                lambda data: data_callback(websocket_server, data),
+                asyncio.get_event_loop(),
+                250,
             )
 
             await tracker.connect()

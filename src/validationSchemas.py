@@ -1,5 +1,5 @@
 METHODS = ["connect", "start", "stop", "calibrate", "disconnect"]
-EYE_TRACKERS = ["opengaze", "smi", "eyelogic"]
+EYE_TRACKERS = ["opengaze", "smi", "eyelogic", "dummy"]
 
 BASE_SCHEMA = {
     "type": "object",
@@ -24,7 +24,7 @@ CONNECT_SCHEMA = {
     },
     "oneOf": [
         {
-            "properties": {"tracker": {"enum": ["smi", "eyelogic"]}},
+            "properties": {"tracker": {"enum": ["smi", "eyelogic", "dummy"]}},
             "required": ["type", "tracker"],
         },
         {
