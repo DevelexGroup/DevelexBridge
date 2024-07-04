@@ -1,3 +1,4 @@
+import asyncio
 from trackers.Tracker import Tracker
 import ctypes as ct
 from typing import Callable, Any, Coroutine
@@ -12,13 +13,18 @@ except Exception:
 class SMITracker(Tracker):
     __model: str = "smi"
 
-    def __init__(self, data_callback: Callable[[Any], Coroutine[Any, Any, None]]):
+    def __init__(
+        self,
+        data_callback: Callable[[Any], Coroutine[Any, Any, None]],
+        loop: asyncio.AbstractEventLoop,
+    ):
         self.api = iViewXAPI.iViewXAPI
         self.data_callback = data_callback
         self.paused = True
         self.sample_func = ct.WINFUNCTYPE(ct.c_int, iViewXAPI.CSample)(
             self.sample_callback
         )
+        self.loop = loop
 
     async def connect(self) -> None:
         res = self.api.iV_SetLogger(ct.c_int(1), ct.c_char_p(b"tracker.log"))
@@ -69,10 +75,18 @@ class SMITracker(Tracker):
         else:
             await self.data_callback(response.error_response(message))
 
-    async def sample_callback(self, sample: iViewXAPI.CSample) -> int:
+    def sample_callback(self, sample: iViewXAPI.CSample) -> int:
         if self.paused:
             return 0
 
+        asyncio.run_coroutine_threadsafe(
+            self.send_callback_data(sample),
+            self.loop,
+        )
+
+        return 0
+
+    async def send_callback_data(self, sample: iViewXAPI.CSample) -> None:
         await self.data_callback(
             response.response(
                 "point",
@@ -85,8 +99,6 @@ class SMITracker(Tracker):
                 },
             )
         )
-
-        return 0
 
     @property
     def model(self) -> str:

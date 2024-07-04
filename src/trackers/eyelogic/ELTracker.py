@@ -88,7 +88,7 @@ class ELTracker(Tracker):
 
         return self.__sample_callback
 
-    async def send_callback_data(self, sample: EL.POINTER(EL.ELGazeSample)):  # type: ignore
+    async def send_callback_data(self, sample: EL.POINTER(EL.ELGazeSample)) -> None:  # type: ignore
         await self.data_callback(
             response.response(
                 "point",
