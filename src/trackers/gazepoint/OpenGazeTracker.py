@@ -194,7 +194,7 @@ class OpenGazeTracker(Tracker):
 
         # timestamp as int, provisionally from time.time()
         # TODO: Implement timestamp from tracker, but that will be difficult, CPU ticks?
-        timestamp = time.time()
+        timestamp = time.time() * 1000 # in milliseconds to match the client side timestamp
 
         base_data = {
             "xL": data.get("LPOGX"),
