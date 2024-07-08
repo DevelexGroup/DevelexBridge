@@ -48,13 +48,15 @@ release_windows:
   needs:
     - job: windows_build
       artifacts: true
+  variables:
+    TAG: "$CI_COMMIT_BRANCH_$CI_COMMIT_MESSAGE"
   script:
     - echo "Releasing Windows artifact $JOB_ID"
   release:
-    name: "Release $CI_COMMIT_NAME"
-    tag_name: $CI_COMMIT_NAME
-    ref: $CI_COMMIT_NAME
-    description: "Release for $CI_COMMIT_NAME"
+    name: "Release $TAG"
+    tag_name: "$TAG"
+    ref: "$TAG"
+    description: "Release for $TAG"
     assets:
       links:
         - name: "develex-bridge.exe"
