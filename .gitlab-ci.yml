@@ -45,7 +45,7 @@ release_windows:
     - job: windows_build
       artifacts: true
   variables:
-    TAG: "$CI_COMMIT_SHA"
+    TAG: "$CI_COMMIT_TAG"
   script:
     - echo "Releasing Windows artifact $JOB_ID"
   release:
