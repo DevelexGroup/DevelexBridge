@@ -50,6 +50,6 @@ release_windows:
       artifacts: true
   script:
     - echo "Releasing Windows artifact $JOB_ID"
-    - release-cli --insecure-https create --name="Release for $JOB_ID" --tag-name="v1.0.0" --assets-link='{"name":"develex-bridge.exe","url":"https://gitlab.ics.muni.cz/473783/develex-bridge/-/jobs/'$JOB_ID'/artifacts/file/develex-bridge.exe"}'
+    - release-cli --insecure-https create --name="Release for $JOB_ID" --tag-name="v1.0.$JOB_ID" --assets-link='{"name":"develex-bridge.exe","url":"https://gitlab.ics.muni.cz/473783/develex-bridge/-/jobs/'$JOB_ID'/artifacts/file/develex-bridge.exe"}'
   only:
     - master
