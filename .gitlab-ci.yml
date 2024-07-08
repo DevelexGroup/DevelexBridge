@@ -1,0 +1,30 @@
+tests:
+  stage: test
+  image: python:3.8
+  script:
+    - echo "Running tests"
+    - pip install -r ./src/requirements.txt
+    - python -m pytest ./src/tests --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+windows_build:
+  stage: build
+  image:
+    name: batonogov/pyinstaller-windows:latest
+    entrypoint: [""]
+  script:
+    - echo "Creating Windows artifact"
+    - pip install -r ./src/requirements.txt
+    - cd ./src && pyinstaller -F -c --add-data "./trackers/smi/iViewXAPI64.dll;." --add-data "./trackers/eyelogic/api/x64/*;./trackers/eyelogic/api/x64" --add-data "./trackers/eyelogic/api/x86/*;./trackers/eyelogic/api/x86" -n "develex-bridge" main.py
+    - cp ./dist/*.exe ../
+  dependencies:
+    - tests
+  rules:
+    - when: always
+  artifacts:
+    paths:
+      - "*.exe"
+    when: always
