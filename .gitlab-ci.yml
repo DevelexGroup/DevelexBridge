@@ -1,3 +1,7 @@
+stages:
+  - test
+  - build
+
 tests:
   stage: test
   image: python:3.8
