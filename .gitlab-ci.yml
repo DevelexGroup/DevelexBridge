@@ -1,6 +1,7 @@
 stages:
   - test
   - build
+  - release
 
 test:
   stage: test
@@ -49,6 +50,7 @@ release_windows:
     - echo "Releasing Windows artifact $JOB_ID"
   release:
     name: "Release $TAG"
+    tag_name: "$TAG"
     ref: "$TAG"
     assets:
       links:
