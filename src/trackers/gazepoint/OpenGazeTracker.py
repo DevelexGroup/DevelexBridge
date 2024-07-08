@@ -73,9 +73,6 @@ class OpenGazeTracker(Tracker):
         await self.data_callback(response.response("started"))
         self.is_paused = False
 
-        # send confirmation message to the client
-        await self.data_callback(response.response("connected"))
-
         while True:
             if self.reader is None or self.is_paused is True:
                 break
