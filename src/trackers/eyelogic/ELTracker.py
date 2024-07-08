@@ -9,7 +9,7 @@ from .ELApiExtension import (
 import asyncio
 
 try:
-    import eyelogic.ELApi as EL
+    import trackers.eyelogic.api.ELApi as EL
 except Exception:
     raise Exception("Unable to import ELApi")
 

@@ -1,4 +1,4 @@
-import eyelogic.ELApi as EL
+import trackers.eyelogic.api.ELApi as EL
 
 
 def handle_connect_return(code: EL.ELApi.ReturnConnect) -> tuple[bool, str]:
