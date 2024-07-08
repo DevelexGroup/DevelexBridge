@@ -52,6 +52,7 @@ release_windows:
     name: "Release $TAG"
     tag_name: "$TAG"
     ref: "$TAG"
+    description: "Release for $TAG"
     assets:
       links:
         - name: "develex-bridge.exe"
