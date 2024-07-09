@@ -95,25 +95,36 @@ class OpenGazeTracker(Tracker):
         await self.data_callback(response.response("stopped"))
 
     async def calibrate(self) -> None:
+        """
+        Warning! Open Gaze API documentation incorrectly states that the calibration is
+        started by sending <SET ID="CALIBRATE_START" VALUE="1" />. This is incorrect.
+        Parameters are STATE, not VALUE. The correct command is <SET ID="CALIBRATE_START" STATE="1" />.
+        """
         if self.reader is None:
             return
 
-        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" VALUE="1" />\r\n')
-        await self.send_to_tracker('<SET ID="CALIBRATE_START" VALUE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="CALIBRATE_START" STATE="1" />\r\n')
 
-        data = await self.reader.read(1024)
+        """ 
+        Listen to calibration data until receiving
+        <CAL ID="CALIB_RESULT" ... /> 
+        """
+        while True:
+            data = await self.reader.read(1024)
 
-        if not data:
-            await self.data_callback(
-                response.error_response("No calibration data received from tracker")
-            )
-            return
+            if not data:
+                break
 
-        print(f"Recieved: {data.decode()!r}")
-        await self.decode_data(data)
+            print(f"Received: {data.decode()!r}")
 
-        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" VALUE="0" />\r\n')
-        await self.send_to_tracker('<SET ID="CALIBRATE_START" VALUE="0" />\r\n')
+            if b'<CAL ID="CALIB_RESULT"' in data:
+                await self.decode_data(data)
+                break
+
+        await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="CALIBRATE_START" STATE="0" />\r\n')
+        await self.data_callback(response.response("calibrated"))
 
     async def send_to_tracker(self, command: str) -> None:
         if self.writer is None:
