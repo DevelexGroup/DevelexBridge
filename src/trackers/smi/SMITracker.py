@@ -50,7 +50,7 @@ class SMITracker(Tracker):
 
         if success:
             self.__state = TrackerState.CONNECTED
-            await self.data_callback(response.response("connected", {}))
+            await self.data_callback(response.response("connected"))
         else:
             self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.error_response(message))
@@ -62,17 +62,19 @@ class SMITracker(Tracker):
 
         if success:
             self.__state = TrackerState.DISCONNECTED
-            await self.data_callback(response.response("disconnected", {}))
+            await self.data_callback(response.response("disconnected"))
         else:
             await self.data_callback(response.error_response(message))
 
     async def start(self) -> None:
         self.paused = False
         self.__state = TrackerState.STARTED
+        await self.data_callback("started")
 
     async def stop(self) -> None:
         self.paused = True
         self.__state = TrackerState.STOPPED
+        await self.data_callback("stopped")
 
     async def calibrate(self) -> None:
         res = self.api.iV_Calibrate()
@@ -80,7 +82,7 @@ class SMITracker(Tracker):
         success, message = iViewXAPI.handle_return_code(res)
 
         if success:
-            await self.data_callback(response.response("calibrated", {}))
+            await self.data_callback(response.response("calibrated"))
         else:
             await self.data_callback(response.error_response(message))
 

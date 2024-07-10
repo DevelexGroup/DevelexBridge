@@ -71,11 +71,13 @@ class ELTracker(Tracker):
             return
 
         self.__state = TrackerState.STARTED
+        await self.data_callback("started")
 
     async def stop(self) -> None:
         self.api.unrequestTracking()
 
         self.__state = TrackerState.STOPPED
+        await self.data_callback("stopped")
 
     @property
     def model(self) -> str:

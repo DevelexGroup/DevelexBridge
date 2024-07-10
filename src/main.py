@@ -80,7 +80,7 @@ async def on_start_callback(
 ) -> None:
     global tracker
 
-    if tracker is None:
+    if tracker is None or tracker.state == TrackerState.DISCONNECTED:
         await oh.handle_no_tracker(websocket_server)
         return
 
@@ -96,12 +96,16 @@ async def on_stop_callback(
 ) -> None:
     global tracker
 
-    if tracker is None:
+    if tracker is None or tracker.state == TrackerState.DISCONNECTED:
         await oh.handle_no_tracker(websocket_server)
         return
 
     if tracker.state == TrackerState.CONNECTING:
         await oh.handle_tracker_connecting(websocket_server)
+        return
+
+    if tracker.state != TrackerState.STARTED:
+        await oh.handle_tracker_not_started(websocket_server)
         return
 
     await asyncio.create_task(tracker.stop())
@@ -112,7 +116,7 @@ async def on_calibrate_callback(
 ) -> None:
     global tracker
 
-    if tracker is None:
+    if tracker is None or tracker.state == TrackerState.DISCONNECTED:
         await oh.handle_no_tracker(websocket_server)
         return
 
@@ -128,7 +132,7 @@ async def on_disconnect_callback(
 ) -> None:
     global tracker
 
-    if tracker is None:
+    if tracker is None or tracker.state == TrackerState.DISCONNECTED:
         await oh.handle_no_tracker(websocket_server)
         return
 
@@ -160,7 +164,9 @@ async def received_data_callback(
     try:
         jsonschema.validate(data, va.BASE_SCHEMA)
 
-        asyncio.create_task(MESSAGE_CALLBACKS[data["type"]](data, websocket_server))
+        await asyncio.create_task(
+            MESSAGE_CALLBACKS[data["type"]](data, websocket_server)
+        )
     except jsonschema.exceptions.ValidationError as e:
         await oh.data_callback(websocket_server, response.error_response(e.message))
         print(f"Validation error: {e.message}")
