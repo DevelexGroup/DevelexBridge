@@ -1,5 +1,5 @@
 import asyncio
-from trackers.Tracker import Tracker
+from trackers.Tracker import Tracker, TrackerState
 import ctypes as ct
 from typing import Callable, Any, Coroutine
 import response
@@ -11,6 +11,7 @@ except Exception:
 
 
 class SMITracker(Tracker):
+    __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "smi"
 
     def __init__(
@@ -27,6 +28,8 @@ class SMITracker(Tracker):
         self.loop = loop
 
     async def connect(self) -> None:
+        self.__state = TrackerState.CONNECTING
+
         res = self.api.iV_SetLogger(ct.c_int(1), ct.c_char_p(b"tracker.log"))
         res = self.api.iV_Connect(
             ct.c_char_p(b"127.0.0.1"),
@@ -38,6 +41,7 @@ class SMITracker(Tracker):
         success, message = iViewXAPI.handle_return_code(res)
 
         if not success:
+            self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.error_response(message))
             return
 
@@ -45,8 +49,10 @@ class SMITracker(Tracker):
         success, message = iViewXAPI.handle_return_code(res)
 
         if success:
+            self.__state = TrackerState.CONNECTED
             await self.data_callback(response.response("connected", {}))
         else:
+            self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.error_response(message))
 
     async def disconnect(self) -> None:
@@ -55,15 +61,18 @@ class SMITracker(Tracker):
         success, message = iViewXAPI.handle_return_code(res)
 
         if success:
+            self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.response("disconnected", {}))
         else:
             await self.data_callback(response.error_response(message))
 
     async def start(self) -> None:
         self.paused = False
+        self.__state = TrackerState.STARTED
 
     async def stop(self) -> None:
         self.paused = True
+        self.__state = TrackerState.STOPPED
 
     async def calibrate(self) -> None:
         res = self.api.iV_Calibrate()
@@ -103,3 +112,7 @@ class SMITracker(Tracker):
     @property
     def model(self) -> str:
         return self.__model
+
+    @property
+    def state(self) -> TrackerState:
+        return self.__state

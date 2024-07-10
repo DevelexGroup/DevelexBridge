@@ -1,7 +1,7 @@
 import asyncio
 import time
 from typing import Callable, Any, Coroutine, Optional
-from trackers.Tracker import Tracker
+from trackers.Tracker import Tracker, TrackerState
 from websocketserver.WebSocketServer import WebSocketServer
 import response
 
@@ -30,6 +30,7 @@ class OpenGazeTracker(Tracker):
     :param writer: The writer object for writing data to the tracker. (asyncio.StreamWriter)
     """
 
+    __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "opengaze"
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
@@ -51,12 +52,18 @@ class OpenGazeTracker(Tracker):
         self.is_paused = False
 
     async def connect(self) -> None:
+        self.__state = TrackerState.CONNECTING
+
         try:
             self.reader, self.writer = await asyncio.open_connection(
                 self.tcp_host, self.tcp_port
             )
+
+            self.__state = TrackerState.CONNECTED
         except ConnectionRefusedError:
+            self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.error_response("Connection refused"))
+            return
 
         print("Connected to TCP server")
 
@@ -69,8 +76,8 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
-        print("Sent commands to tracker")
         await self.data_callback(response.response("started"))
+        self.__state = TrackerState.STARTED
         self.is_paused = False
 
         while True:
@@ -91,6 +98,7 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="0" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
+        self.start = TrackerState.STOPPED
         self.is_paused = True
         await self.data_callback(response.response("stopped"))
 
@@ -106,9 +114,9 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="CALIBRATE_START" STATE="1" />\r\n')
 
-        """ 
+        """
         Listen to calibration data until receiving
-        <CAL ID="CALIB_RESULT" ... /> 
+        <CAL ID="CALIB_RESULT" ... />
         """
         while True:
             data = await self.reader.read(1024)
@@ -136,8 +144,10 @@ class OpenGazeTracker(Tracker):
     async def disconnect(self) -> None:
         if self.writer is None:
             return
+
         self.writer.close()
         await self.writer.wait_closed()
+        self.__state = TrackerState.DISCONNECTED
         await self.data_callback(response.response("disconnected"))
 
     async def decode_data(self, data: bytes) -> None:
@@ -202,7 +212,9 @@ class OpenGazeTracker(Tracker):
 
         # timestamp as int, provisionally from time.time()
         # TODO: Implement timestamp from tracker, but that will be difficult, CPU ticks?
-        timestamp = time.time() * 1000 # in milliseconds to match the client side timestamp
+        timestamp = (
+            time.time() * 1000
+        )  # in milliseconds to match the client side timestamp
 
         base_data = {
             "xL": data.get("LPOGX"),
@@ -225,3 +237,7 @@ class OpenGazeTracker(Tracker):
     @property
     def model(self) -> str:
         return self.__model
+
+    @property
+    def state(self) -> TrackerState:
+        return self.__state

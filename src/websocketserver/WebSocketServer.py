@@ -27,7 +27,7 @@ class WebSocketServer:
     async def start_server(self) -> None:
         self.server = await websockets.serve(self.handler, self.host, self.port)
 
-        print(f"WebSocket server started on {self.host}:{self.port}")
+        print(f"[DEVELEX] WebSocket server started on {self.host}:{self.port}")
 
     async def handler(self, websocket: websockets.WebSocketServerProtocol) -> None:
         self.connected.add(websocket)
@@ -50,16 +50,19 @@ class WebSocketServer:
                     if isinstance(json_data, dict):
                         await self.received_data_callback(json_data, self)
                     else:
-                        print(f"Received invalid data from client: {str(data)}")
+                        print(
+                            f"[DEVELEX] Received invalid data from client: {str(data)}"
+                        )
                 except json.JSONDecodeError:
-                    print(f"Received invalid data from client: {str(data)}")
+                    print(f"[DEVELEX] Received invalid data from client: {str(data)}")
             except websockets.ConnectionClosed:
                 break
 
     async def send_data(self, data: dict[Any, Any]) -> None:
-        print(f"Sending data to {len(self.connected)} clients")
-
         json_data = json.dumps(data)
+
+        print(f"[DEVELEX] Sending data ({json_data}) to {len(self.connected)} clients")
+
         await asyncio.gather(*(ws.send(json_data) for ws in self.connected if ws.open))
 
     async def close(self) -> None:

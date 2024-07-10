@@ -147,16 +147,16 @@ else:
     libname = "iViewXAPI.dll"
 
 try:
-    print("Loading iViewX DLL from relative path")
+    print("[SMI] Loading iViewX DLL from relative path")
     iViewXAPI = windll.LoadLibrary(libname)
-    print("Loaded iViewX DLL from relative path")
+    print("[SMI] Loaded iViewX DLL from relative path")
 except Exception:
-    print("Loading iViewX DLL from absolute path")
+    print("[SMI] Loading iViewX DLL from absolute path")
     import os
 
     fpath = os.path.dirname(__file__)
     iViewXAPI = windll.LoadLibrary(os.path.join(fpath, libname))
-    print("Loaded iViewX DLL from absolute path")
+    print("[SMI] Loaded iViewX DLL from absolute path")
 
 
 # ===========================

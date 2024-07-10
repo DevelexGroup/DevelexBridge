@@ -1,10 +1,24 @@
 from abc import ABC, abstractmethod
+from enum import Enum
+
+
+class TrackerState(Enum):
+    DISCONNECTED = 0
+    CONNECTING = 1
+    CONNECTED = 2
+    STARTED = 3
+    STOPPED = 4
 
 
 class Tracker(ABC):
     @property
     @abstractmethod
     def model(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def state(self) -> TrackerState:
         pass
 
     @abstractmethod

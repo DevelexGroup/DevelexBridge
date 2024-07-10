@@ -1,4 +1,4 @@
-from trackers.Tracker import Tracker
+from trackers.Tracker import Tracker, TrackerState
 from typing import Callable, Any, Coroutine, Optional
 import response
 from .ELApiExtension import (
@@ -15,6 +15,7 @@ except Exception:
 
 
 class ELTracker(Tracker):
+    __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "eyelogic"
     __sample_callback = Optional[EL.GazeSampleCallback]
     __event_callback = Optional[EL.EventCallback]
@@ -33,18 +34,23 @@ class ELTracker(Tracker):
         self.loop = loop
 
     async def connect(self) -> None:
+        self.__state = TrackerState.CONNECTING
         success, message = handle_connect_return(self.api.connect())
 
         if not success:
+            self.__state = TrackerState.DISCONNECTED
             await self.data_callback(response.error_response(message))
             return
 
+        self.__state = TrackerState.CONNECTED
         await self.data_callback(response.response("connected"))
 
     async def disconnect(self) -> None:
         self.api.disconnect()
         self.api.registerGazeSampleCallback(None)
         self.api.registerEventCallback(None)
+
+        self.__state = TrackerState.DISCONNECTED
 
         await self.data_callback(response.response("disconnected"))
 
@@ -64,12 +70,20 @@ class ELTracker(Tracker):
             await self.data_callback(response.error_response(message))
             return
 
+        self.__state = TrackerState.STARTED
+
     async def stop(self) -> None:
         self.api.unrequestTracking()
+
+        self.__state = TrackerState.STOPPED
 
     @property
     def model(self) -> str:
         return self.__model
+
+    @property
+    def state(self) -> TrackerState:
+        return self.__state
 
     """
         EyeLogic API Callbacks
