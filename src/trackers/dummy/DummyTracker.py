@@ -1,6 +1,6 @@
 import threading
 import response
-from trackers.Tracker import Tracker
+from trackers.Tracker import Tracker, TrackerState
 import asyncio
 from random import randrange
 from time import sleep
@@ -8,6 +8,7 @@ from typing import Optional
 
 
 class DummyTracker(Tracker):
+    __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "dummy"
     __sample_callback = None
     __sample_thread: Optional[threading.Thread] = None
@@ -31,14 +32,21 @@ class DummyTracker(Tracker):
     def model(self) -> str:
         return self.__model
 
+    @property
+    def state(self) -> TrackerState:
+        return self.__state
+
     async def connect(self) -> None:
         self.get_sample_callback()
+        self.__state = TrackerState.CONNECTED
         await self.data_callback(response.response("connected"))
 
     async def disconnect(self) -> None:
         if self.__sample_thread is not None:
             self.__sample_thread_running = False
             self.__sample_thread.join()
+
+        self.__state = TrackerState.DISCONNECTED
 
         await self.data_callback(response.response("disconnected"))
 
@@ -47,9 +55,11 @@ class DummyTracker(Tracker):
 
     async def start(self) -> None:
         self.paused = False
+        self.__state = TrackerState.STARTED
 
     async def stop(self) -> None:
         self.paused = True
+        self.__state = TrackerState.STOPPED
 
     def get_sample_callback(self):
         def gaze_sample_callback(sample: dict[str, float]) -> None:
