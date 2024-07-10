@@ -56,10 +56,12 @@ class DummyTracker(Tracker):
     async def start(self) -> None:
         self.paused = False
         self.__state = TrackerState.STARTED
+        await self.data_callback("started")
 
     async def stop(self) -> None:
         self.paused = True
         self.__state = TrackerState.STOPPED
+        await self.data_callback("stopped")
 
     def get_sample_callback(self):
         def gaze_sample_callback(sample: dict[str, float]) -> None:
