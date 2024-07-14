@@ -42,6 +42,7 @@ async def on_connect_callback(
                 "localhost",
                 4242,
                 lambda data: oh.data_callback(websocket_server, data),
+                asyncio.get_event_loop(),
             )
 
             await tracker.connect()

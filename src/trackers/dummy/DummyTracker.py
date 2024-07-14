@@ -26,7 +26,9 @@ class DummyTracker(Tracker):
         self.__sample_thread.start()
 
     def __del__(self):
-        self.__sample_thread.join()
+        if self.__sample_thread is not None:
+            self.__sample_thread_running = False
+            self.__sample_thread.join()
 
     @property
     def model(self) -> str:
