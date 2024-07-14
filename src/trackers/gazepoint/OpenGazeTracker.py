@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from typing import Callable, Any, Coroutine, Optional
 from trackers.Tracker import Tracker, TrackerState
@@ -32,6 +33,8 @@ class OpenGazeTracker(Tracker):
 
     __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "opengaze"
+    __reader_thread: Optional[threading.Thread] = None
+    __reader_thread_running = False
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
     is_paused: bool
@@ -42,6 +45,7 @@ class OpenGazeTracker(Tracker):
         tcp_host: str,
         tcp_port: int,
         data_callback: Callable[[Any], Coroutine[Any, Any, None]],
+        loop: asyncio.AbstractEventLoop,
     ):
         self.tcp_host = tcp_host
         self.tcp_port = tcp_port
@@ -50,6 +54,16 @@ class OpenGazeTracker(Tracker):
         self.writer = None
         self.keep_fixation_data = keep_fixation_data
         self.is_paused = False
+        self.loop = loop
+        self.__reader_thread_running = True
+        self.__reader_thread = threading.Thread(target=self.recieve_tracker_data_thread)
+        self.__reader_thread.daemon = True
+        self.__reader_thread.start()
+
+    def __del__(self):
+        if self.__reader_thread is not None:
+            self.__reader_thread_running = False
+            self.__reader_thread.join()
 
     async def connect(self) -> None:
         self.__state = TrackerState.CONNECTING
@@ -80,17 +94,22 @@ class OpenGazeTracker(Tracker):
         self.__state = TrackerState.STARTED
         self.is_paused = False
 
-        while True:
-            if self.reader is None or self.is_paused is True:
-                break
+    def recieve_tracker_data_thread(self):
+        while self.__reader_thread_running:
+            if (
+                self.reader is not None
+                and self.__state == TrackerState.STARTED
+                and not self.is_paused
+            ):
+                data = asyncio.run_coroutine_threadsafe(
+                    self.reader.read(1024), self.loop
+                ).result()
 
-            data = await self.reader.read(1024)
+                if not data:
+                    continue
 
-            if not data:
-                break
-
-            print(f"Received: {data.decode()!r}")
-            await self.decode_data(data)
+                print(f"Received: {data.decode()!r}")
+                asyncio.run_coroutine_threadsafe(self.decode_data(data), self.loop)
 
     async def stop(self) -> None:
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="0" />\r\n')
@@ -98,7 +117,7 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="0" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
-        self.start = TrackerState.STOPPED
+        self.__state = TrackerState.STOPPED
         self.is_paused = True
         await self.data_callback(response.response("stopped"))
 
@@ -148,6 +167,11 @@ class OpenGazeTracker(Tracker):
         self.writer.close()
         await self.writer.wait_closed()
         self.__state = TrackerState.DISCONNECTED
+
+        if self.__reader_thread is not None:
+            self.__reader_thread_running = False
+            self.__reader_thread.join()
+
         await self.data_callback(response.response("disconnected"))
 
     async def decode_data(self, data: bytes) -> None:
