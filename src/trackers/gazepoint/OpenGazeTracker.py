@@ -164,6 +164,9 @@ class OpenGazeTracker(Tracker):
         if self.writer is None:
             return
 
+        if self.__state == TrackerState.STARTED:
+            await self.stop()
+
         self.writer.close()
         await self.writer.wait_closed()
         self.__state = TrackerState.DISCONNECTED
