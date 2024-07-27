@@ -36,7 +36,6 @@ class OpenGazeTracker(Tracker):
     __reader_thread: Optional[threading.Thread] = None
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
-    is_paused: bool
 
     def __init__(
         self,
@@ -46,14 +45,13 @@ class OpenGazeTracker(Tracker):
         data_callback: Callable[[Any], Coroutine[Any, Any, None]],
         loop: asyncio.AbstractEventLoop,
     ):
-        self.thread_running = True
+        self._stop_thread = threading.Event()
         self.tcp_host = tcp_host
         self.tcp_port = tcp_port
         self.data_callback = data_callback
         self.reader = None
         self.writer = None
         self.keep_fixation_data = keep_fixation_data
-        self.is_paused = False
         self.loop = loop
         self.__reader_thread = threading.Thread(target=self.recieve_tracker_data_thread)
         self.__reader_thread.daemon = True
@@ -61,8 +59,14 @@ class OpenGazeTracker(Tracker):
 
     def __del__(self):
         if self.__reader_thread is not None:
-            self.thread_running = False
+            self.stop_thread()
             self.__reader_thread.join()
+
+    def stop_thread(self):
+        self._stop_thread.set()
+
+    def stopped(self):
+        return self._stop_thread.is_set()
 
     async def connect(self) -> None:
         self.__state = TrackerState.CONNECTING
@@ -91,24 +95,27 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         await self.data_callback(response.response("started"))
         self.__state = TrackerState.STARTED
-        self.is_paused = False
 
     def recieve_tracker_data_thread(self):
-        while self.thread_running:
-            if (
-                self.reader is not None
-                and self.__state == TrackerState.STARTED
-                and not self.is_paused
-            ):
-                data = asyncio.run_coroutine_threadsafe(
-                    self.reader.read(1024), self.loop
-                ).result()
+        while not self.stopped():
+            if self.reader is not None and self.__state == TrackerState.STARTED:
+                try:
+                    future_data = asyncio.run_coroutine_threadsafe(
+                        self.reader.read(1024), self.loop
+                    )
 
-                if not data:
+                    try:
+                        data = future_data.result(timeout=1.0)
+                    except Exception as e:
+                        continue
+
+                    if not data:
+                        continue
+
+                    print(f"Received: {data.decode()!r}")
+                    asyncio.run_coroutine_threadsafe(self.decode_data(data), self.loop)
+                except Exception as e:
                     continue
-
-                print(f"Received: {data.decode()!r}")
-                asyncio.run_coroutine_threadsafe(self.decode_data(data), self.loop)
 
     async def stop(self) -> None:
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="0" />\r\n')
@@ -117,7 +124,6 @@ class OpenGazeTracker(Tracker):
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
         self.__state = TrackerState.STOPPED
-        self.is_paused = True
         await self.data_callback(response.response("stopped"))
 
     async def calibrate(self) -> None:
@@ -160,28 +166,19 @@ class OpenGazeTracker(Tracker):
         await self.writer.drain()
 
     async def disconnect(self) -> None:
-        print("Disconnect 1")
         if self.writer is None:
             return
 
-        print("Disconnect 2")
-
         if self.__state == TrackerState.STARTED:
             await self.stop()
-
-        print("Disconnect 3")
 
         self.writer.close()
         await self.writer.wait_closed()
         self.__state = TrackerState.DISCONNECTED
 
-        print("Disconnect 4")
-
         if self.__reader_thread is not None:
-            print("Disconnect 5")
-            self.thread_running = False
+            self.stop_thread()
             self.__reader_thread.join()
-            print("Disconnect 6")
 
         await self.data_callback(response.response("disconnected"))
 

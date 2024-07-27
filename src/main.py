@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 
 tracker: Optional[Tracker] = None
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 
 async def on_connect_callback(
