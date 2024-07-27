@@ -161,19 +161,28 @@ class OpenGazeTracker(Tracker):
         await self.writer.drain()
 
     async def disconnect(self) -> None:
+        print("Disconnect 1")
         if self.writer is None:
             return
 
+        print("Disconnect 2")
+
         if self.__state == TrackerState.STARTED:
             await self.stop()
+
+        print("Disconnect 3")
 
         self.writer.close()
         await self.writer.wait_closed()
         self.__state = TrackerState.DISCONNECTED
 
+        print("Disconnect 4")
+
         if self.__reader_thread is not None:
+            print("Disconnect 5")
             self.__reader_thread_running = False
             self.__reader_thread.join()
+            print("Disconnect 6")
 
         await self.data_callback(response.response("disconnected"))
 
