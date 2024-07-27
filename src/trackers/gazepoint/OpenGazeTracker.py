@@ -34,7 +34,6 @@ class OpenGazeTracker(Tracker):
     __state: TrackerState = TrackerState.DISCONNECTED
     __model: str = "opengaze"
     __reader_thread: Optional[threading.Thread] = None
-    __reader_thread_running = False
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
     is_paused: bool
@@ -47,6 +46,7 @@ class OpenGazeTracker(Tracker):
         data_callback: Callable[[Any], Coroutine[Any, Any, None]],
         loop: asyncio.AbstractEventLoop,
     ):
+        self.thread_running = True
         self.tcp_host = tcp_host
         self.tcp_port = tcp_port
         self.data_callback = data_callback
@@ -55,14 +55,13 @@ class OpenGazeTracker(Tracker):
         self.keep_fixation_data = keep_fixation_data
         self.is_paused = False
         self.loop = loop
-        self.__reader_thread_running = True
         self.__reader_thread = threading.Thread(target=self.recieve_tracker_data_thread)
         self.__reader_thread.daemon = True
         self.__reader_thread.start()
 
     def __del__(self):
         if self.__reader_thread is not None:
-            self.__reader_thread_running = False
+            self.thread_running = False
             self.__reader_thread.join()
 
     async def connect(self) -> None:
@@ -95,7 +94,7 @@ class OpenGazeTracker(Tracker):
         self.is_paused = False
 
     def recieve_tracker_data_thread(self):
-        while self.__reader_thread_running:
+        while self.thread_running:
             if (
                 self.reader is not None
                 and self.__state == TrackerState.STARTED
@@ -180,7 +179,7 @@ class OpenGazeTracker(Tracker):
 
         if self.__reader_thread is not None:
             print("Disconnect 5")
-            self.__reader_thread_running = False
+            self.thread_running = False
             self.__reader_thread.join()
             print("Disconnect 6")
 
