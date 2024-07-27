@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 
 tracker: Optional[Tracker] = None
+VERSION = "1.0.0"
 
 
 async def on_connect_callback(
@@ -177,7 +178,7 @@ async def received_data_callback(
 async def main() -> None:
     websocket_server = WebSocketServer("localhost", 13892, received_data_callback)
 
-    print("[DEVELEX] Starting bridge...")
+    print(f"[DEVELEX] Starting bridge... version: {VERSION}")
 
     await websocket_server.start_server()
 
