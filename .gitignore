@@ -1,6 +1,6 @@
-build
-dist
-main.exe
-main.spec
-__pycache__/
-tester.py
+/DevelexBridge/.idea
+/DevelexBridge/.vs
+/DevelexBridge**/[Bb]in/
+/DevelexBridge**/[Oo]bj/
+/DevelexBridge**/[Dd]ebug/
+/DevelexBridge**/[Rr]elease/
