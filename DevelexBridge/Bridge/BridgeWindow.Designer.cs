@@ -40,9 +40,9 @@ partial class BridgeWindow
         buttonStartStop.Name = "buttonStartStop";
         buttonStartStop.Size = new Size(135, 24);
         buttonStartStop.TabIndex = 0;
-        buttonStartStop.Text = "button1";
+        buttonStartStop.Text = "Zapnout";
         buttonStartStop.UseVisualStyleBackColor = true;
-        buttonStartStop.Click += button1_Click;
+        buttonStartStop.Click += startStopButton_Click;
         // 
         // tbIpPort
         // 
