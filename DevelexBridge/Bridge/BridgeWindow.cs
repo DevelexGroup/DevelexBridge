@@ -1,6 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
+using Bridge.Models;
 using Bridge.Output;
 using Bridge.WebSockets;
 
@@ -57,10 +60,45 @@ public partial class BridgeWindow : Form
     private void OnMessageRecieved(WebSocket webSocket, string message)
     {
         ConsoleOutput.WsMessageRecieved(message);
+
+        if (!TryParseWebsocketMessage(message, out var parsedMessage))
+        {
+            ConsoleOutput.WsUnableToParseMessage("neznámý typ zprávy");
+            return;
+        }
+        
+        Console.Write(parsedMessage.Type);
     }
-
-    private void Form1_Load(object sender, EventArgs e)
+    
+    private bool TryParseWebsocketMessage(string message, [NotNullWhen(true)] out WsBaseMessage? parsedMessage)
     {
+        parsedMessage = null;
 
+        try
+        {
+            var baseMessage = JsonSerializer.Deserialize<WsBaseMessage>(message);
+
+            if (baseMessage == null)
+            {
+                return false;
+            }
+
+            parsedMessage = baseMessage.Type switch
+            {
+                "connect" => JsonSerializer.Deserialize<WsConnectMessage>(message),
+                "start" => JsonSerializer.Deserialize<WsStartMessage>(message),
+                "stop" => JsonSerializer.Deserialize<WsStopMessage>(message),
+                "calibrate" => JsonSerializer.Deserialize<WsCalibrateMessage>(message),
+                "disconnect" => JsonSerializer.Deserialize<WsDisconnectMessage>(message),
+                _ => null,
+            };
+
+            return parsedMessage != null;
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.WsUnableToParseMessage(ex.Message);
+            return false;
+        }
     }
 }

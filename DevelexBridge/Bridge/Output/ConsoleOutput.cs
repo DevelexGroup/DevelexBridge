@@ -42,6 +42,11 @@ public static class ConsoleOutput
         Console.WriteLine($"[WS] Nová zpráva: {message}");
     }
 
+    public static void WsUnableToParseMessage(string errorMessage)
+    {
+        Console.WriteLine($"[WS] Nebylo možné sparsovat zprávu: {errorMessage}");
+    }
+
     public static void InputWrongIpOrPort()
     {
         Console.WriteLine($"Špatně zadaná IP nebo port.");

@@ -76,7 +76,6 @@ partial class BridgeWindow
         Name = "BridgeWindow";
         StartPosition = FormStartPosition.CenterScreen;
         Text = "Form1";
-        Load += Form1_Load;
         ResumeLayout(false);
         PerformLayout();
     }
