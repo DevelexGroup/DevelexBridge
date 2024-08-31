@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using Bridge.Output;
 
 namespace Bridge.WebSockets;
 
@@ -9,8 +10,8 @@ public class WebSocketServer(string ipPort)
 {
     private HttpListener? _httpListener;
     private CancellationTokenSource? _cancellationTokenSource;
-    public string IpPort { get; init; } = ipPort;
-    public event Action<WebSocket, string> MessageRecieved;
+    public string IpPort { get; } = ipPort;
+    public event Action<WebSocket, string>? MessageRecieved;
 
     public void Start()
     {
@@ -71,12 +72,12 @@ public class WebSocketServer(string ipPort)
             }
             catch (HttpListenerException)
             {
-                // Listener stopped
+                ConsoleOutput.WsListenerStopped();
                 break;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                ConsoleOutput.WsListenerError(ex.Message);
             }
         }
     }
@@ -94,7 +95,7 @@ public class WebSocketServer(string ipPort)
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", token);
-                    Console.WriteLine("WebSocket closed.");
+                    ConsoleOutput.WsRecievedClose();
                 }
                 else
                 {
@@ -104,7 +105,7 @@ public class WebSocketServer(string ipPort)
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WebSocket error: {ex.Message}");
+                ConsoleOutput.WsRecievingMessageError(ex.Message);
                 break;
             }
         }

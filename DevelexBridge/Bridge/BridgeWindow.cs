@@ -25,7 +25,7 @@ public partial class BridgeWindow : Form
 
             if (string.IsNullOrEmpty(ipPort))
             {
-                Console.WriteLine("Zadejete ip nebo port");
+                ConsoleOutput.InputWrongIpOrPort();
                 return;
             }
 
@@ -36,13 +36,13 @@ public partial class BridgeWindow : Form
             {
                 Server.Start();
                 buttonStartStop.Text = "Vypnout";
-                Console.WriteLine("Websocket server byl zapnut.");
+                ConsoleOutput.WsStarted(ipPort);
             }
             catch (Exception ex)
             {
                 Server = null;
                 buttonStartStop.Text = "Zapnout";
-                Console.WriteLine($"Nebylo možné zapnout websocket server: {ex.Message}");
+                ConsoleOutput.WsUnableToStart(ex.Message);
             }
         }
         else
@@ -50,13 +50,13 @@ public partial class BridgeWindow : Form
             Server.Stop();
             Server = null;
             buttonStartStop.Text = "Zapnout";
-            Console.WriteLine("Websocket server byl vypnut.");
+            ConsoleOutput.WsStopped();
         }
     }
 
     private void OnMessageRecieved(WebSocket webSocket, string message)
     {
-        Console.WriteLine($"From reciver: {message}");
+        ConsoleOutput.WsMessageRecieved(message);
     }
 
     private void Form1_Load(object sender, EventArgs e)
