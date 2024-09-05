@@ -11,7 +11,8 @@ namespace Bridge;
 
 public partial class BridgeWindow : Form
 {
-    public WebSocketServer? Server { get; set; } = null;
+    private WebSocketServer? Server { get; set; } = null;
+    private EyeTracker? EyeTracker { get; set; } = null;
     
     public BridgeWindow()
     {
@@ -66,8 +67,25 @@ public partial class BridgeWindow : Form
             ConsoleOutput.WsUnableToParseMessage("neznámý typ zprávy");
             return;
         }
-        
-        Console.Write(parsedMessage.Type);
+
+        switch (parsedMessage)
+        {
+            case WsConnectMessage connectMessage:
+                OnConnectMessage(webSocket, connectMessage);
+                break;
+            case WsStartMessage startMessage:
+                OnStartMessage(webSocket, startMessage);
+                break;
+            case WsStopMessage stopMessage:
+                OnStopMessage(webSocket, stopMessage);
+                break;
+            case WsCalibrateMessage calibrateMessage:
+                OnCalibrateMessage(webSocket, calibrateMessage);
+                break;
+            case WsDisconnectMessage disconnectMessage:
+                OnDisconnectMessage(webSocket, disconnectMessage);
+                break;
+        }
     }
     
     private bool TryParseWebsocketMessage(string message, [NotNullWhen(true)] out WsBaseMessage? parsedMessage)
