@@ -13,7 +13,9 @@ public class OpenGaze : EyeTracker
     private TcpClient? _tpcClient = null;
     private NetworkStream? _dataFeeder = null;
     private StreamWriter? _dataWriter = null;
-
+    private Thread? _thread = null;
+    private bool _isRunning = false;
+    
     public override async void Connect()
     {
         State = EyeTrackerState.Connecting;
@@ -47,6 +49,11 @@ public class OpenGaze : EyeTracker
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"1\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"1\" />\\r\\n");
         await _dataWriter.FlushAsync();
+        
+        _isRunning = true;
+        _thread = new Thread(DataThread);
+        _thread.IsBackground = true;
+        _thread.Start();
 
         State = EyeTrackerState.Started;
     }
@@ -63,6 +70,13 @@ public class OpenGaze : EyeTracker
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"0\" />\\r\\n");
         await _dataWriter.FlushAsync();
+
+        if (_thread != null)
+        {
+            _isRunning = false;
+            _thread.Join();
+            _thread = null;
+        }
 
         State = EyeTrackerState.Stopped;
     }
@@ -109,8 +123,99 @@ public class OpenGaze : EyeTracker
         _dataWriter.Close();
         _tpcClient.Close();
 
-
         State = EyeTrackerState.Disconnected;
+    }
+
+    private async void DataThread()
+    {
+        while (_isRunning)
+        {
+            if (State == EyeTrackerState.Started && _dataFeeder != null)
+            {
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+
+                while ((bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+                    Console.WriteLine($"Received: {data}");
+
+                    DecodeData(data);
+                }
+            }
+        }
+    }
+
+    private void DecodeData(string data)
+    {
+        var lines = data.Split("\n").Where(s => !string.IsNullOrEmpty(s)).ToList();
+        var keyValueData = new Dictionary<string, string>();
+
+        foreach (var line in lines)
+        {
+            if (!line.StartsWith("<REC"))
+            {
+                continue;
+            }
+            
+            var parts = line.Split(" ").Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+            if (parts.Count < 2)
+            {
+                continue;
+            }
+
+            if (parts[0].StartsWith("<REC"))
+            {
+                parts.RemoveAt(0);
+            }
+
+            int lastIndex = parts.Count - 1;
+
+            if (parts[lastIndex].StartsWith("/>"))
+            {
+                parts.RemoveAt(lastIndex);
+            }
+
+            foreach (var part in parts)
+            {
+                var keyValue = part.Split("=").Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+                if (keyValue.Count != 2)
+                {
+                    continue;
+                }
+
+                keyValueData[keyValue[0]] = keyValue[1].Trim('"');
+            }
+
+            var parsedData = ParseData(keyValueData);
+            
+            // send data from here or return
+        }
+    }
+
+    private OutputCoreData ParseData(Dictionary<string, string> data)
+    {
+        var outputData = new OutputCoreData();
+
+        outputData.Type = "point";
+        outputData.LeftX = double.Parse(data["xL"]);
+        outputData.LeftY = double.Parse(data["yL"]);
+        outputData.RightX = double.Parse(data["xR"]);
+        outputData.RightY = double.Parse(data["yR"]);
+        outputData.LeftValidity = bool.Parse(data["validityL"]);
+        outputData.RightValidity = bool.Parse(data["validityR"]);
+        outputData.Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+        if (data["FPOGV"] == "1")
+        {
+            outputData.FixationId = data["fixationId"];
+            outputData.FixationDuration = int.Parse(data["fixationDuration"]);
+        }
+
+        return outputData;
     }
     
     [MemberNotNullWhen(true, nameof(_tpcClient))]
