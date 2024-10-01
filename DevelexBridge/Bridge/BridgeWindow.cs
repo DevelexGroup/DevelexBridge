@@ -115,8 +115,12 @@ public partial class BridgeWindow : Form
         }
         catch (Exception ex)
         {
-            ConsoleOutput.WsUnableToParseMessage(ex.Message);
             return false;
         }
+    }
+    
+    private Task? SendToAll(WsBaseResponseMessage responseMessage)
+    {
+        return Server?.SendToAll(JsonSerializer.Serialize(responseMessage));
     }
 }
