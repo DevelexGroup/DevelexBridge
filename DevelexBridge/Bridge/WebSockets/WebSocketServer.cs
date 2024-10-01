@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -12,6 +13,7 @@ public class WebSocketServer(string ipPort)
     private CancellationTokenSource? _cancellationTokenSource;
     public string IpPort { get; } = ipPort;
     public event Action<WebSocket, string>? MessageRecieved;
+    private readonly ConcurrentDictionary<WebSocket, string> _clients = new();
 
     public void Start()
     {
@@ -55,13 +57,15 @@ public class WebSocketServer(string ipPort)
         
         while (_httpListener.IsListening)
         {
-            try
+            try 
             {
                 var context = await _httpListener.GetContextAsync();
 
                 if (context.Request.IsWebSocketRequest)
                 {
                     var webSocketContext = await context.AcceptWebSocketAsync(null);
+                    _clients.TryAdd(webSocketContext.WebSocket,
+                        context.Request.RemoteEndPoint?.ToString() ?? "Unknown");
                     await HandleWebSocketAsync(webSocketContext.WebSocket, token);
                 }
                 else
@@ -110,10 +114,38 @@ public class WebSocketServer(string ipPort)
             }
         }
 
+        if (_clients.TryRemove(webSocket, out var endpoint))
+        {
+            Console.WriteLine($"successfully closed with endpoint {endpoint}");
+        }
+        
         if (webSocket.State != WebSocketState.Closed)
         {
             webSocket.Abort();
-            webSocket.Dispose();
         }
+
+        webSocket.Dispose();
+    }
+
+    public IReadOnlyCollection<string> GetClients() => _clients.Values.ToList().AsReadOnly();
+
+    public async Task SendToAll(string message)
+    {
+        var buffer = Encoding.UTF8.GetBytes(message);
+        var tasks = _clients.Keys
+            .Where(ws => ws.State == WebSocketState.Open)
+            .Select(async ws =>
+            {
+                try
+                {
+                    await ws.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
+            });
+
+        await Task.WhenAll(tasks);
     }
 }
