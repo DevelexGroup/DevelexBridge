@@ -1,4 +1,5 @@
 ﻿using System.Net.WebSockets;
+using System.Text.Json;
 using Bridge.Enums;
 using Bridge.EyeTrackers.OpenGaze;
 using Bridge.Models;
@@ -27,9 +28,22 @@ public partial class BridgeWindow
         switch (message.Tracker)
         {
             case "opengaze":
-                EyeTracker = new OpenGaze();
-                EyeTracker.Connect();
+                var og = new OpenGaze(SendToAll);
+                EyeTracker = og;
                 break;
+        }
+
+        if (EyeTracker != null)
+        {
+            try
+            {
+                EyeTracker.Connect();
+                Server?.SendToAll(JsonSerializer.Serialize(new WsBaseResponseMessage("connected")));
+            }
+            catch (Exception ex)
+            {
+                Server?.SendToAll(JsonSerializer.Serialize(new WsErrorResponseMessage(ex.Message)));
+            }
         }
     }
 }

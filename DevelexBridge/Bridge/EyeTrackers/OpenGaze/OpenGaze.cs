@@ -1,15 +1,18 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json.Serialization.Metadata;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Models;
 
 namespace Bridge.EyeTrackers.OpenGaze;
 
-public class OpenGaze : EyeTracker
+public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
+    public override Func<WsBaseResponseMessage, Task?> WsResponse { get; init; } = wsResponse;
+    
     private TcpClient? _tpcClient = null;
     private NetworkStream? _dataFeeder = null;
     private StreamWriter? _dataWriter = null;
@@ -26,15 +29,16 @@ public class OpenGaze : EyeTracker
         }
         catch (Exception ex)
         {
-            Console.WriteLine("OG cannot connect");
             _tpcClient = null;
-            return;
+            throw;
         }
 
         _dataFeeder = _tpcClient.GetStream();
         _dataWriter = new StreamWriter(_dataFeeder);
 
         State = EyeTrackerState.Connected;
+
+        await WsResponse(new WsBaseResponseMessage("ad"));
     }
 
     public override async void Start()
