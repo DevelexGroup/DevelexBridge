@@ -49,6 +49,9 @@ class WebSocketServer:
                     json_data = json.loads(data)
                     if isinstance(json_data, dict):
                         await self.received_data_callback(json_data, self)
+
+                        if "type" in json_data and json_data["type"] == "disconnect":
+                            self.connected.remove(websocket)
                     else:
                         print(
                             f"[DEVELEX] Received invalid data from client: {str(data)}"
