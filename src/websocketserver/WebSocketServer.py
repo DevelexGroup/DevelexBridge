@@ -36,7 +36,8 @@ class WebSocketServer:
             await self.process_incoming_messages(websocket)
         finally:
             # Unregister websocket connection
-            self.connected.remove(websocket)
+            if websocket in self.connected:
+                self.connected.remove(websocket)
 
     async def process_incoming_messages(
         self, websocket: websockets.WebSocketServerProtocol
@@ -50,7 +51,11 @@ class WebSocketServer:
                     if isinstance(json_data, dict):
                         await self.received_data_callback(json_data, self)
 
-                        if "type" in json_data and json_data["type"] == "disconnect":
+                        if (
+                            "type" in json_data
+                            and json_data["type"] == "disconnect"
+                            and websocket in self.connected
+                        ):
                             self.connected.remove(websocket)
                     else:
                         print(
