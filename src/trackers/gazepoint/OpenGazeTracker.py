@@ -91,6 +91,8 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="1" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="1" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n')
         await self.data_callback(response.response("started"))
@@ -121,6 +123,8 @@ class OpenGazeTracker(Tracker):
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_FIX" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_LEFT" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_POG_RIGHT" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="0" />\r\n')
+        await self.send_to_tracker('<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="0" />\r\n')
         # await self.send_to_tracker('<SET ID="ENABLE_SEND_TIME" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="ENABLE_SEND_DATA" STATE="0" />\r\n')
         self.__state = TrackerState.STOPPED
@@ -255,6 +259,8 @@ class OpenGazeTracker(Tracker):
             "xR": data.get("RPOGX"),
             "yR": data.get("RPOGY"),
             "validityR": data.get("RPOGV"),
+            "pupilDiameterL": data.get("LPD"),
+            "pupilDiameterR": data.get("RPD"),
             "timestamp": timestamp,
             "type": "point",
         }
