@@ -5,6 +5,7 @@ from typing import Callable, Any, Coroutine, Optional
 from trackers.Tracker import Tracker, TrackerState
 from websocketserver.WebSocketServer import WebSocketServer
 import response
+import time
 
 
 class OpenGazeTracker(Tracker):
@@ -146,8 +147,17 @@ class OpenGazeTracker(Tracker):
         Listen to calibration data until receiving
         <CAL ID="CALIB_RESULT" ... />
         """
+        timeout_start = time.time()
+        is_success = False
+
         while True:
-            data = await self.reader.read(1024)
+            if time.time() - timeout_start > 15:
+                break
+
+            try:
+                data = await asyncio.wait_for(self.reader.read(1024), timeout=10.0)
+            except asyncio.TimeoutError:
+                break
 
             if not data:
                 break
@@ -155,12 +165,19 @@ class OpenGazeTracker(Tracker):
             print(f"Received: {data.decode()!r}")
 
             if b'<CAL ID="CALIB_RESULT"' in data:
+                is_success = True
                 await self.decode_data(data)
                 break
 
         await self.send_to_tracker('<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
         await self.send_to_tracker('<SET ID="CALIBRATE_START" STATE="0" />\r\n')
-        await self.data_callback(response.response("calibrated"))
+
+        if is_success:
+            await self.data_callback(response.response("calibrated"))
+        else:
+            await self.data_callback(
+                response.error_response("Calibration timeout or data failed")
+            )
 
     async def send_to_tracker(self, command: str) -> None:
         if self.writer is None:
