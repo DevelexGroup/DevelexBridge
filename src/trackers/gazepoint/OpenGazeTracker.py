@@ -37,6 +37,7 @@ class OpenGazeTracker(Tracker):
     __reader_thread: Optional[threading.Thread] = None
     reader: Optional[asyncio.StreamReader]
     writer: Optional[asyncio.StreamWriter]
+    calibrate_lock = asyncio.Lock()
 
     def __init__(
         self,
@@ -155,7 +156,8 @@ class OpenGazeTracker(Tracker):
                 break
 
             try:
-                data = await asyncio.wait_for(self.reader.read(1024), timeout=10.0)
+                async with self.calibrate_lock:
+                    data = await asyncio.wait_for(self.reader.read(1024), timeout=5.0)
             except asyncio.TimeoutError:
                 break
 
