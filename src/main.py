@@ -33,7 +33,7 @@ async def on_connect_callback(
             tracker.state != TrackerState.DISCONNECTED
             and tracker.state != TrackerState.CONNECTING
         ):
-            await oh.handle_tracker_already_connected(websocket_server)
+            await oh.data_callback(response.response("connected"))
             return
 
     match data["tracker"]:
