@@ -8,19 +8,19 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private void OnConnectMessage(WebSocket webSocket, WsConnectMessage message)
+    private async Task OnConnectMessage(WebSocket webSocket, WsConnectMessage message)
     {
         if (EyeTracker != null)
         {
             if (EyeTracker.State == EyeTrackerState.Connecting)
             {
-                WsErrorDeviceConnecting();
+                await WsErrorDeviceConnecting();
                 return;
             }
             
             if (EyeTracker.State == EyeTrackerState.Connected)
             {
-                SendToAll(new WsErrorResponseMessage("device already connected"));
+                await SendToAll(new WsErrorResponseMessage("device already connected"));
                 return;
             }
         }
@@ -37,12 +37,11 @@ public partial class BridgeWindow
         {
             try
             {
-                EyeTracker.Connect();
-                SendToAll(new WsBaseResponseMessage("connected"));
+                await EyeTracker.Connect();
             }
             catch (Exception ex)
             {
-                SendToAll(new WsErrorResponseMessage(ex.Message));
+                await SendToAll(new WsErrorResponseMessage(ex.Message));
             }
         }
     }

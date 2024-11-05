@@ -5,14 +5,14 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private void OnBridgeStateMessage(WebSocket websocket, WsBridgeStatusMessage message)
+    private async Task OnBridgeStateMessage(WebSocket websocket, WsBridgeStatusMessage message)
     {
         if (EyeTracker == null)
         {
-            WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected();
             return;
         }
 
-        SendToAll(new WsStatusResponseMessage(EyeTracker.State));
+        await SendToAll(new WsStatusResponseMessage(EyeTracker.State));
     }
 }

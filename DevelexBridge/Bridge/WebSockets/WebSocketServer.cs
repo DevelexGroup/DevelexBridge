@@ -7,12 +7,12 @@ using Bridge.Output;
 
 namespace Bridge.WebSockets;
 
-public class WebSocketServer(string ipPort)
+public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messageHandler)
 {
     private HttpListener? _httpListener;
     private CancellationTokenSource? _cancellationTokenSource;
     public string IpPort { get; } = ipPort;
-    public event Action<WebSocket, string>? MessageRecieved;
+    public Func<WebSocket, string, Task> MessageHandler { get; } = messageHandler;
     private readonly ConcurrentDictionary<WebSocket, string> _clients = new();
 
     public void Start()
@@ -25,7 +25,7 @@ public class WebSocketServer(string ipPort)
         {
             _httpListener.Start();
             
-            Task.Run(() => AcceptWebSocketClientsAsync(_cancellationTokenSource.Token));
+            Task.Run(async () => await AcceptWebSocketClientsAsync(_cancellationTokenSource));
         }
         catch (Exception e)
         {
@@ -36,8 +36,24 @@ public class WebSocketServer(string ipPort)
 
     public void Stop()
     {
+        foreach (var client in _clients.Keys)
+        {
+            try
+            {
+                if (client.State == WebSocketState.Open || client.State == WebSocketState.Connecting)
+                {
+                    client.Abort();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while aborting WebSocket: {ex.Message}");
+            }
+        }
+        
         _cancellationTokenSource?.Cancel();
         _httpListener?.Stop();
+        _httpListener?.Close();
         _httpListener = null;
     }
 
@@ -48,7 +64,7 @@ public class WebSocketServer(string ipPort)
         return _cancellationTokenSource != null && _httpListener != null;
     }
     
-    private async Task AcceptWebSocketClientsAsync(CancellationToken token)
+    private async Task AcceptWebSocketClientsAsync(CancellationTokenSource cancellationTokenSource)
     {
         if (!IsRunning())
         {
@@ -59,14 +75,14 @@ public class WebSocketServer(string ipPort)
         {
             try 
             {
-                var context = await _httpListener.GetContextAsync();
-
+                var context = await _httpListener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                
                 if (context.Request.IsWebSocketRequest)
                 {
                     var webSocketContext = await context.AcceptWebSocketAsync(null);
                     _clients.TryAdd(webSocketContext.WebSocket,
                         context.Request.RemoteEndPoint?.ToString() ?? "Unknown");
-                    await HandleWebSocketAsync(webSocketContext.WebSocket, token);
+                    await HandleWebSocketAsync(webSocketContext.WebSocket, cancellationTokenSource);
                 }
                 else
                 {
@@ -86,25 +102,25 @@ public class WebSocketServer(string ipPort)
         }
     }
     
-    private async Task HandleWebSocketAsync(WebSocket webSocket, CancellationToken token)
+    private async Task HandleWebSocketAsync(WebSocket webSocket, CancellationTokenSource cancellationTokenSource)
     {
         var buffer = new byte[1024 * 4];
 
-        while (webSocket.State == WebSocketState.Open && !token.IsCancellationRequested)
+        while (webSocket.State == WebSocketState.Open && !cancellationTokenSource.Token.IsCancellationRequested)
         {
             try
             {
-                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), token);
+                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationTokenSource.Token);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", token);
+                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cancellationTokenSource.Token);
                     ConsoleOutput.WsRecievedClose();
                 }
                 else
                 {
                     var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    MessageRecieved?.Invoke(webSocket, message);
+                    await MessageHandler(webSocket, message);
                 }
             }
             catch (Exception ex)

@@ -6,17 +6,17 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private void OnStopMessage(WebSocket webSocket, WsStopMessage message)
+    private async Task OnStopMessage(WebSocket webSocket, WsStopMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
-            WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected();
             return;
         }
 
         if (EyeTracker.State == EyeTrackerState.Connecting)
         {
-            WsErrorDeviceConnecting();
+            await WsErrorDeviceConnecting();
             return;
         }
 
@@ -26,6 +26,6 @@ public partial class BridgeWindow
             return;
         }
         
-        EyeTracker.Stop();
+        await EyeTracker.Stop();
     }
 }

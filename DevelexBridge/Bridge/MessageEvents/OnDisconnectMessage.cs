@@ -6,15 +6,15 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private void OnDisconnectMessage(WebSocket webSocket, WsDisconnectMessage message)
+    private async Task OnDisconnectMessage(WebSocket webSocket, WsDisconnectMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
-            WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected();
             return;
         }
         
-        EyeTracker.Disconnect();
+        await EyeTracker.Disconnect();
         EyeTracker = null;
     }
 }

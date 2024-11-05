@@ -33,8 +33,7 @@ public partial class BridgeWindow : Form
                 return;
             }
 
-            Server = new WebSocketServer(ipPort);
-            Server.MessageRecieved += OnMessageRecieved;
+            Server = new WebSocketServer(ipPort, OnMessageRecieved);
 
             try
             {
@@ -58,7 +57,7 @@ public partial class BridgeWindow : Form
         }
     }
 
-    private void OnMessageRecieved(WebSocket webSocket, string message)
+    private async Task OnMessageRecieved(WebSocket webSocket, string message)
     {
         ConsoleOutput.WsMessageRecieved(message);
 
@@ -71,22 +70,22 @@ public partial class BridgeWindow : Form
         switch (parsedMessage)
         {
             case WsConnectMessage connectMessage:
-                OnConnectMessage(webSocket, connectMessage);
+                await OnConnectMessage(webSocket, connectMessage);
                 break;
             case WsStartMessage startMessage:
-                OnStartMessage(webSocket, startMessage);
+                await OnStartMessage(webSocket, startMessage);
                 break;
             case WsStopMessage stopMessage:
-                OnStopMessage(webSocket, stopMessage);
+                await OnStopMessage(webSocket, stopMessage);
                 break;
             case WsCalibrateMessage calibrateMessage:
-                OnCalibrateMessage(webSocket, calibrateMessage);
+                await OnCalibrateMessage(webSocket, calibrateMessage);
                 break;
             case WsDisconnectMessage disconnectMessage:
-                OnDisconnectMessage(webSocket, disconnectMessage);
+                await OnDisconnectMessage(webSocket, disconnectMessage);
                 break;
             case WsBridgeStatusMessage bridgeStatusMessage:
-                OnBridgeStateMessage(webSocket, bridgeStatusMessage);
+                await OnBridgeStateMessage(webSocket, bridgeStatusMessage);
                 break;
         }
     }

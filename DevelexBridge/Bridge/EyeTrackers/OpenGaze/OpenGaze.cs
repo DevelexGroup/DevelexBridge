@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Models;
@@ -20,7 +18,7 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
     private Thread? _thread = null;
     private bool _isRunning = false;
     
-    public override async void Connect()
+    public override async Task Connect()
     {
         State = EyeTrackerState.Connecting;
         
@@ -43,19 +41,14 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         await WsResponse(new WsBaseResponseMessage("connected"));
     }
 
-    public override async void Start()
+    public override async Task Start()
     {
         if (!IsConnected())
         {
             throw new EyeTrackerNotConnected("zařízení není připojené");
         }
-        
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"1\" />\\r\\n");
+
+        await ToggleSendingData(true);
         await _dataWriter.FlushAsync();
         
         _isRunning = true;
@@ -68,19 +61,14 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         await WsResponse(new WsBaseResponseMessage("started"));
     }
 
-    public override async void Stop()
+    public override async Task Stop()
     {
         if (!IsConnected())
         {
             throw new EyeTrackerNotConnected("zařízení není připojené");
         }
-        
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"0\" />\\r\\n");
+
+        await ToggleSendingData(false);
         await _dataWriter.FlushAsync();
 
         if (_thread != null)
@@ -95,7 +83,7 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         await WsResponse(new WsBaseResponseMessage("stopped"));
     }
 
-    public override async void Calibrate()
+    public override async Task Calibrate()
     {
         if (!IsConnected())
         {
@@ -129,7 +117,7 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         await WsResponse(new WsBaseResponseMessage("calibrated"));
     }
 
-    public override async void Disconnect()
+    public override async Task Disconnect()
     {
         if (!IsConnected())
         {
@@ -242,5 +230,20 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
     private bool IsConnected()
     {
         return _tpcClient != null && _tpcClient.Connected && _dataFeeder != null && _dataWriter != null;
+    }
+
+    private async Task ToggleSendingData(bool state)
+    {
+        var stateValue = state ? 1 : 0;
+        
+        if (_dataWriter != null)
+        {
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_DATA\" STATE=\"{stateValue}\" />\\r\\n");
+        }
     }
 }

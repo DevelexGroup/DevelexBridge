@@ -9,9 +9,9 @@ public abstract class EyeTracker
 
     public abstract Func<WsBaseResponseMessage, Task> WsResponse { get; init; }
     
-    public abstract void Connect();
-    public abstract void Start();
-    public abstract void Stop();
-    public abstract void Calibrate();
-    public abstract void Disconnect();
+    public abstract Task Connect();
+    public abstract Task Start();
+    public abstract Task Stop();
+    public abstract Task Calibrate();
+    public abstract Task Disconnect();
 }

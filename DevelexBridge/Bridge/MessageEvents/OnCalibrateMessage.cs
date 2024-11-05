@@ -6,20 +6,20 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private void OnCalibrateMessage(WebSocket webSocket, WsCalibrateMessage message)
+    private async Task OnCalibrateMessage(WebSocket webSocket, WsCalibrateMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
-            WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected();
             return;
         }
 
         if (EyeTracker.State == EyeTrackerState.Connecting)
         {
-            WsErrorDeviceConnecting();
+            await WsErrorDeviceConnecting();
             return;
         }
         
-        EyeTracker.Calibrate();
+        await EyeTracker.Calibrate();
     }
 }
