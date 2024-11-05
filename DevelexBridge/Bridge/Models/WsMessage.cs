@@ -36,3 +36,8 @@ public class WsDisconnectMessage : WsBaseMessage
 {
     
 }
+
+public class WsBridgeStatusMessage : WsBaseMessage
+{
+    
+}

@@ -85,6 +85,9 @@ public partial class BridgeWindow : Form
             case WsDisconnectMessage disconnectMessage:
                 OnDisconnectMessage(webSocket, disconnectMessage);
                 break;
+            case WsBridgeStatusMessage bridgeStatusMessage:
+                OnBridgeStateMessage(webSocket, bridgeStatusMessage);
+                break;
         }
     }
     
@@ -108,6 +111,7 @@ public partial class BridgeWindow : Form
                 "stop" => JsonSerializer.Deserialize<WsStopMessage>(message),
                 "calibrate" => JsonSerializer.Deserialize<WsCalibrateMessage>(message),
                 "disconnect" => JsonSerializer.Deserialize<WsDisconnectMessage>(message),
+                "status" => JsonSerializer.Deserialize<WsBridgeStatusMessage>(message),
                 _ => null,
             };
 
@@ -119,8 +123,8 @@ public partial class BridgeWindow : Form
         }
     }
     
-    private Task? SendToAll(WsBaseResponseMessage responseMessage)
+    private Task SendToAll(WsBaseResponseMessage responseMessage)
     {
-        return Server?.SendToAll(JsonSerializer.Serialize(responseMessage));
+        return Server?.SendToAll(JsonSerializer.Serialize(responseMessage)) ?? Task.FromResult(false);
     }
 }

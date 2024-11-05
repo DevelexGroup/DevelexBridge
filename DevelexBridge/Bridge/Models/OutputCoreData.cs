@@ -2,11 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace Bridge.Models;
 
-public class OutputCoreData
+public class OutputCoreData(string type) : WsBaseResponseMessage(type)
 {
-    [JsonPropertyName("Type")]
-    public string Type { get; set; }
-    
     [JsonPropertyName("xL")]
     public double LeftX { get; set; }
     

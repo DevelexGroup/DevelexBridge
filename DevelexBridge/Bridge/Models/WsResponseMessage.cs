@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Bridge.Enums;
 
 namespace Bridge.Models;
 
@@ -12,4 +13,10 @@ public class WsErrorResponseMessage(string message) : WsBaseResponseMessage("err
 {
     [JsonPropertyName("message")]
     public string Message { get; set; } = message;
+}
+
+public class WsStatusResponseMessage(EyeTrackerState state) : WsBaseResponseMessage("status")
+{
+    [JsonPropertyName("state")]
+    public EyeTrackerState State { get; set; } = state;
 }

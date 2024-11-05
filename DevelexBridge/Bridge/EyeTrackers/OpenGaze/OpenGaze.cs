@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
@@ -8,10 +9,10 @@ using Bridge.Models;
 
 namespace Bridge.EyeTrackers.OpenGaze;
 
-public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracker
+public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
-    public override Func<WsBaseResponseMessage, Task?> WsResponse { get; init; } = wsResponse;
+    public override Func<WsBaseResponseMessage, Task> WsResponse { get; init; } = wsResponse;
     
     private TcpClient? _tpcClient = null;
     private NetworkStream? _dataFeeder = null;
@@ -38,7 +39,7 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
 
         State = EyeTrackerState.Connected;
 
-        await WsResponse(new WsBaseResponseMessage("ad"));
+        await WsResponse(new WsBaseResponseMessage("connected"));
     }
 
     public override async void Start()
@@ -62,6 +63,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         _thread.Start();
 
         State = EyeTrackerState.Started;
+
+        await WsResponse(new WsBaseResponseMessage("started"));
     }
 
     public override async void Stop()
@@ -87,6 +90,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         }
 
         State = EyeTrackerState.Stopped;
+
+        await WsResponse(new WsBaseResponseMessage("stopped"));
     }
 
     public override async void Calibrate()
@@ -102,7 +107,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
 
         byte[] buffer = new byte[1024];
         int bytesRead;
-
+        
+        // TODO: timeout
         while ((bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length)) > 0)
         {
             string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
@@ -118,9 +124,11 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\\r\\n");
         await _dataWriter.FlushAsync();
+
+        await WsResponse(new WsBaseResponseMessage("calibrated"));
     }
 
-    public override void Disconnect()
+    public override async void Disconnect()
     {
         if (!IsConnected())
         {
@@ -132,6 +140,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         _tpcClient.Close();
 
         State = EyeTrackerState.Disconnected;
+        
+        await WsResponse(new WsBaseResponseMessage("disconnected"));
     }
 
     private async void DataThread()
@@ -200,15 +210,14 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
 
             var parsedData = ParseData(keyValueData);
             
-            // send data from here or return
+            WsResponse(parsedData);
         }
     }
 
     private OutputCoreData ParseData(Dictionary<string, string> data)
     {
-        var outputData = new OutputCoreData();
+        var outputData = new OutputCoreData("point");
 
-        outputData.Type = "point";
         outputData.LeftX = double.Parse(data["xL"]);
         outputData.LeftY = double.Parse(data["yL"]);
         outputData.RightX = double.Parse(data["xR"]);
