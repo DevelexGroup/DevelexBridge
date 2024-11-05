@@ -51,6 +51,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"1\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"1\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"1\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"1\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"1\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"1\" />\\r\\n");
         await _dataWriter.FlushAsync();
         
@@ -72,6 +74,8 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task?> wsResponse) : EyeTracke
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"0\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"0\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"ENABLE_SEND_DATA\" STATE=\"0\" />\\r\\n");
         await _dataWriter.FlushAsync();
 
