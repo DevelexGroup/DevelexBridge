@@ -10,7 +10,7 @@ public partial class BridgeWindow
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
-            // not connected
+            WsErrorDeviceNotConnected();
             return;
         }
         

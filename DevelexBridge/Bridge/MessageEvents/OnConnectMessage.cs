@@ -14,13 +14,13 @@ public partial class BridgeWindow
         {
             if (EyeTracker.State == EyeTrackerState.Connecting)
             {
-                // connecting
+                WsErrorDeviceConnecting();
                 return;
             }
             
             if (EyeTracker.State == EyeTrackerState.Connected)
             {
-                // connected
+                SendToAll(new WsErrorResponseMessage("device already connected"));
                 return;
             }
         }
@@ -38,11 +38,11 @@ public partial class BridgeWindow
             try
             {
                 EyeTracker.Connect();
-                Server?.SendToAll(JsonSerializer.Serialize(new WsBaseResponseMessage("connected")));
+                SendToAll(new WsBaseResponseMessage("connected"));
             }
             catch (Exception ex)
             {
-                Server?.SendToAll(JsonSerializer.Serialize(new WsErrorResponseMessage(ex.Message)));
+                SendToAll(new WsErrorResponseMessage(ex.Message));
             }
         }
     }
