@@ -31,6 +31,7 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         catch (Exception ex)
         {
             _tpcClient = null;
+            State = EyeTrackerState.Disconnected;
             throw;
         }
 
@@ -214,9 +215,9 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         }
     }
 
-    private OutputCoreData ParseData(Dictionary<string, string> data)
+    private WsResponseOutput ParseData(Dictionary<string, string> data)
     {
-        var outputData = new OutputCoreData("point");
+        var outputData = new WsResponseOutput("point");
 
         outputData.LeftX = double.Parse(data["xL"]);
         outputData.LeftY = double.Parse(data["yL"]);
