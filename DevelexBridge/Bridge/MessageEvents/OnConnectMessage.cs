@@ -24,7 +24,7 @@ public partial class BridgeWindow
                 return;
             }
         }
-
+        
         switch (message.Tracker)
         {
             case "opengaze":

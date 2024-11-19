@@ -2,18 +2,22 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
+using Bridge.Models;
 using Bridge.Output;
 
 namespace Bridge.WebSockets;
 
-public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messageHandler)
+// Stolen from https://github.com/jchristn/WatsonWebsocket/blob/master/src/WatsonWebsocket/WatsonWsServer.cs
+
+public class WebSocketServer(string ipPort, Func<WsMessageRecievedArgs, Task> messageHandler)
 {
     private HttpListener? _httpListener;
     private CancellationTokenSource? _cancellationTokenSource;
     public string IpPort { get; } = ipPort;
-    public Func<WebSocket, string, Task> MessageHandler { get; } = messageHandler;
-    private readonly ConcurrentDictionary<WebSocket, string> _clients = new();
+    public Func<WsMessageRecievedArgs, Task> MessageHandler { get; } = messageHandler;
+    private readonly ConcurrentDictionary<Guid, WsClientMetadata> _clients = new();
 
     public void Start()
     {
@@ -25,7 +29,7 @@ public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messag
         {
             _httpListener.Start();
             
-            Task.Run(async () => await AcceptWebSocketClientsAsync(_cancellationTokenSource));
+            Task.Run(() => AcceptWebSocketClientsAsync(_cancellationTokenSource.Token), _cancellationTokenSource.Token);
         }
         catch (Exception e)
         {
@@ -53,7 +57,6 @@ public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messag
         
         _cancellationTokenSource?.Cancel();
         _httpListener?.Stop();
-        _httpListener?.Close();
         _httpListener = null;
     }
 
@@ -64,33 +67,49 @@ public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messag
         return _cancellationTokenSource != null && _httpListener != null;
     }
     
-    private async Task AcceptWebSocketClientsAsync(CancellationTokenSource cancellationTokenSource)
+    private async Task AcceptWebSocketClientsAsync(CancellationToken token)
     {
-        if (!IsRunning())
+        while (!token.IsCancellationRequested)
         {
-            return;
-        }
-        
-        while (_httpListener.IsListening)
-        {
-            try 
+            try
             {
-                var context = await _httpListener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(5));
-                
-                if (context.Request.IsWebSocketRequest)
+                if (_httpListener == null || !_httpListener.IsListening)
                 {
-                    var webSocketContext = await context.AcceptWebSocketAsync(null);
-                    _clients.TryAdd(webSocketContext.WebSocket,
-                        context.Request.RemoteEndPoint?.ToString() ?? "Unknown");
-                    await HandleWebSocketAsync(webSocketContext.WebSocket, cancellationTokenSource);
+                    Task.Delay(100).Wait();
+                    continue;
                 }
-                else
+
+                var context = await _httpListener.GetContextAsync().ConfigureAwait(false);
+
+                if (!context.Request.IsWebSocketRequest)
                 {
                     context.Response.StatusCode = 400;
                     context.Response.Close();
+
+                    continue;
                 }
+                
+                await Task.Run(() =>
+                {
+                    var newTokenSource = new CancellationTokenSource();
+                    var newToken = newTokenSource.Token;
+
+                    Task.Run(async () =>
+                    {
+                        var ctxGuid = context.Request.Headers.Get("x-guid");
+                        var guid = string.IsNullOrEmpty(ctxGuid) ? Guid.NewGuid() : Guid.Parse(ctxGuid);
+                        
+                        var webSocketContext = await context.AcceptWebSocketAsync(null);
+                        var clientMetadata = new WsClientMetadata(context, webSocketContext.WebSocket, webSocketContext, newTokenSource, guid);
+
+                        _clients.TryAdd(guid, clientMetadata);
+
+                        await Task.Run(() => HandleDataReciever(clientMetadata), newToken);
+                    }, newToken);
+                }, token).ConfigureAwait(false);
             }
-            catch (HttpListenerException)
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException ||
+                                       ex is ObjectDisposedException || ex is HttpListenerException)
             {
                 ConsoleOutput.WsListenerStopped();
                 break;
@@ -101,49 +120,83 @@ public class WebSocketServer(string ipPort, Func<WebSocket, string, Task> messag
             }
         }
     }
-    
-    private async Task HandleWebSocketAsync(WebSocket webSocket, CancellationTokenSource cancellationTokenSource)
+
+    private async Task HandleDataReciever(WsClientMetadata clientMetadata)
     {
-        var buffer = new byte[1024 * 4];
+        var buffer = new byte[65536];
 
-        while (webSocket.State == WebSocketState.Open && !cancellationTokenSource.Token.IsCancellationRequested)
+        try
         {
-            try
+            while (true)
             {
-                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationTokenSource.Token);
+                var message = await MessageReadAsync(clientMetadata, buffer).ConfigureAwait(false);
 
-                if (result.MessageType == WebSocketMessageType.Close)
+                if (message.Data != null)
                 {
-                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cancellationTokenSource.Token);
-                    ConsoleOutput.WsRecievedClose();
+                    _ = Task.Run(() => MessageHandler(message), clientMetadata.TokenSource.Token);
                 }
                 else
                 {
-                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    await MessageHandler(webSocket, message);
+                    await Task.Delay(10).ConfigureAwait(false);
                 }
             }
-            catch (Exception ex)
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.WsRecievingMessageError(ex.Message);
+        }
+        finally
+        {
+            _clients.TryRemove(clientMetadata.Id, out _);
+
+            if (clientMetadata.WebSocket.State != WebSocketState.Closed)
             {
-                ConsoleOutput.WsRecievingMessageError(ex.Message);
-                break;
+                clientMetadata.WebSocket.Abort();
             }
+            
+            clientMetadata.WebSocket.Dispose();
         }
-
-        if (_clients.TryRemove(webSocket, out var endpoint))
-        {
-            Console.WriteLine($"successfully closed with endpoint {endpoint}");
-        }
-        
-        if (webSocket.State != WebSocketState.Closed)
-        {
-            webSocket.Abort();
-        }
-
-        webSocket.Dispose();
     }
 
-    public IReadOnlyCollection<string> GetClients() => _clients.Values.ToList().AsReadOnly();
+    private async Task<WsMessageRecievedArgs> MessageReadAsync(WsClientMetadata clientMetadata, byte[] buffer)
+    {
+        using (var stream = new MemoryStream(buffer))
+        {
+            var segment = new ArraySegment<byte>(buffer);
+
+            while (true)
+            {
+                var result = await clientMetadata.WebSocket.ReceiveAsync(segment, clientMetadata.TokenSource.Token)
+                    .ConfigureAwait(false);
+
+                if (result.CloseStatus != null)
+                {
+                    await clientMetadata.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "",
+                        CancellationToken.None);
+
+                    throw new WebSocketException("Websocket closed");
+                }
+
+                if (clientMetadata.WebSocket.State != WebSocketState.Open)
+                {
+                    throw new WebSocketException("Websocket state is not open");
+                }
+
+                if (result.Count > 0)
+                {
+                    stream.Write(buffer, 0, result.Count);
+                }
+
+                if (result.EndOfMessage)
+                {
+                    return new WsMessageRecievedArgs(clientMetadata,
+                        new ArraySegment<byte>(stream.GetBuffer(), 0, (int)stream.Length), result.MessageType);
+                }
+            }
+        }
+    }
+
+    public IReadOnlyCollection<WsClientMetadata> GetClients() => _clients.Values.ToList().AsReadOnly();
 
     public async Task SendToAll(string message)
     {
