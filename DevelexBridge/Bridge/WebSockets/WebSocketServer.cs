@@ -184,7 +184,7 @@ public class WebSocketServer : IDisposable
 
             if (result.EndOfMessage)
             {
-                var resultMessage = Encoding.UTF8.GetString(stream.GetBuffer(), 0, result.Count);
+                var resultMessage = Encoding.UTF8.GetString(stream.ToArray(), 0, result.Count);
                     
                 return new WsMessageRecievedArgs(clientMetadata, resultMessage, result.MessageType);
             }
@@ -197,7 +197,10 @@ public class WebSocketServer : IDisposable
     {
         var tasks = _clients.Values
             .Where(metadata => metadata.WebSocket.State == WebSocketState.Open)
-            .Select(async metadata => await SendAsync(metadata.Id, message));
+            .Select(async metadata => await SendAsync(metadata.Id, message))
+            .ToList();
+
+        ConsoleOutput.WsSendingToClients(message, tasks.Count);
         
         await Task.WhenAll(tasks);
     }
