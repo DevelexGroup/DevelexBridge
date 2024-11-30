@@ -1,7 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
-using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using Bridge.Models;
 using Bridge.Output;
@@ -17,15 +14,15 @@ public partial class BridgeWindow : Form
     public BridgeWindow()
     {
         InitializeComponent();
-
-        Console.SetOut(new TextBoxConsole(tbConsole));
+        
+        Console.SetOut(new TextBoxConsole(tbConsoleContainer.InnerTextBox));
     }
 
     private void startStopButton_Click(object sender, EventArgs e)
     {
         if (Server == null)
         {
-            var ipPort = tbIpPort.Text;
+            var ipPort = tbIpPortContainer.InnerTextBox.Text;
 
             if (string.IsNullOrEmpty(ipPort))
             {
