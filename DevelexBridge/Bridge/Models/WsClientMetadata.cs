@@ -13,4 +13,5 @@ public class WsClientMetadata(HttpListenerContext httpContext, WebSocket webSock
     public WebSocket WebSocket = webSocket;
     public WebSocketContext WebSocketContext = webSocketContext;
     public readonly CancellationTokenSource TokenSource = tokenSource;
+    public readonly SemaphoreSlim SendLock = new(1);
 }

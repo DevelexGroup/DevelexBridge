@@ -21,7 +21,7 @@ public partial class BridgeWindow : Form
         Console.SetOut(new TextBoxConsole(tbConsole));
     }
 
-    private void startStopButton_Click(object sender, EventArgs e)
+    private async void startStopButton_Click(object sender, EventArgs e)
     {
         if (Server == null)
         {
@@ -50,15 +50,23 @@ public partial class BridgeWindow : Form
         }
         else
         {
-            Server.Stop();
-            Server = null;
+            Task.Run(() =>
+            {
+                Server.Stop();
+                Server.Dispose();
+                Server = null;
+            });
             buttonStartStop.Text = "Zapnout";
+            buttonStartStop.Enabled = true;
             ConsoleOutput.WsStopped();
         }
     }
 
-    private async Task OnMessageRecieved(WebSocket webSocket, string message)
+    private async Task OnMessageRecieved(WsMessageRecievedArgs messageArgs)
     {
+        var message = messageArgs.Data;
+        var clientMetadata = messageArgs.ClientMetadata;
+        
         ConsoleOutput.WsMessageRecieved(message);
 
         if (!TryParseWebsocketMessage(message, out var parsedMessage))
@@ -70,22 +78,22 @@ public partial class BridgeWindow : Form
         switch (parsedMessage)
         {
             case WsConnectMessage connectMessage:
-                await OnConnectMessage(webSocket, connectMessage);
+                await OnConnectMessage(clientMetadata, connectMessage);
                 break;
             case WsStartMessage startMessage:
-                await OnStartMessage(webSocket, startMessage);
+                await OnStartMessage(clientMetadata, startMessage);
                 break;
             case WsStopMessage stopMessage:
-                await OnStopMessage(webSocket, stopMessage);
+                await OnStopMessage(clientMetadata, stopMessage);
                 break;
             case WsCalibrateMessage calibrateMessage:
-                await OnCalibrateMessage(webSocket, calibrateMessage);
+                await OnCalibrateMessage(clientMetadata, calibrateMessage);
                 break;
             case WsDisconnectMessage disconnectMessage:
-                await OnDisconnectMessage(webSocket, disconnectMessage);
+                await OnDisconnectMessage(clientMetadata, disconnectMessage);
                 break;
             case WsBridgeStatusMessage bridgeStatusMessage:
-                await OnBridgeStateMessage(webSocket, bridgeStatusMessage);
+                await OnBridgeStateMessage(clientMetadata, bridgeStatusMessage);
                 break;
         }
     }

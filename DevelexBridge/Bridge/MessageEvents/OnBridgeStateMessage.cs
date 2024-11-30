@@ -5,7 +5,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnBridgeStateMessage(WebSocket websocket, WsBridgeStatusMessage message)
+    private async Task OnBridgeStateMessage(WsClientMetadata clientMetadata, WsBridgeStatusMessage message)
     {
         if (EyeTracker == null)
         {

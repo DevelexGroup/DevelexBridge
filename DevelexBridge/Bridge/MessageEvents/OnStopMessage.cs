@@ -6,7 +6,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnStopMessage(WebSocket webSocket, WsStopMessage message)
+    private async Task OnStopMessage(WsClientMetadata clientMetadata, WsStopMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {

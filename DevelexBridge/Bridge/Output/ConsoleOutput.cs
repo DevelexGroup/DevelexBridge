@@ -51,4 +51,9 @@ public static class ConsoleOutput
     {
         Console.WriteLine($"Špatně zadaná IP nebo port.");
     }
+
+    public static void WsMessageWriteError(string message)
+    {
+        Console.WriteLine($"[WS] Chyba při posílání zprávy: {message}");
+    }
 }
