@@ -63,6 +63,7 @@ partial class BridgeWindow
         tbConsole.ReadOnly = true;
         tbConsole.Size = new Size(573, 340);
         tbConsole.TabIndex = 2;
+        tbConsole.ScrollBars = ScrollBars.Vertical;
         // 
         // Form1
         // 
@@ -75,7 +76,7 @@ partial class BridgeWindow
         Controls.Add(buttonStartStop);
         Name = "BridgeWindow";
         StartPosition = FormStartPosition.CenterScreen;
-        Text = "Form1";
+        Text = "Develex Bridge";
         ResumeLayout(false);
         PerformLayout();
     }

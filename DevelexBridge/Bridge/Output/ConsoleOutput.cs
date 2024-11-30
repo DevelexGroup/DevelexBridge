@@ -56,4 +56,9 @@ public static class ConsoleOutput
     {
         Console.WriteLine($"[WS] Chyba při posílání zprávy: {message}");
     }
+
+    public static void WsSendingToClients(string message, int clients)
+    {
+        Console.WriteLine($"[WS] Posílám {clients} klientům zprávu: {message}");
+    }
 }

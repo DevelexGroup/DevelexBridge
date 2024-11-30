@@ -21,7 +21,7 @@ public partial class BridgeWindow : Form
         Console.SetOut(new TextBoxConsole(tbConsole));
     }
 
-    private async void startStopButton_Click(object sender, EventArgs e)
+    private void startStopButton_Click(object sender, EventArgs e)
     {
         if (Server == null)
         {
@@ -55,10 +55,11 @@ public partial class BridgeWindow : Form
                 Server.Stop();
                 Server.Dispose();
                 Server = null;
+                
+                buttonStartStop.Text = "Zapnout";
+                buttonStartStop.Enabled = true;
+                ConsoleOutput.WsStopped();
             });
-            buttonStartStop.Text = "Zapnout";
-            buttonStartStop.Enabled = true;
-            ConsoleOutput.WsStopped();
         }
     }
 
@@ -110,7 +111,7 @@ public partial class BridgeWindow : Form
             {
                 return false;
             }
-
+            
             parsedMessage = baseMessage.Type switch
             {
                 "connect" => JsonSerializer.Deserialize<WsConnectMessage>(message),
@@ -130,7 +131,7 @@ public partial class BridgeWindow : Form
         }
     }
     
-    private Task SendToAll(WsBaseResponseMessage responseMessage)
+    private Task SendToAll<T>(T responseMessage)
     {
         return Server?.SendToAll(JsonSerializer.Serialize(responseMessage)) ?? Task.FromResult(false);
     }
