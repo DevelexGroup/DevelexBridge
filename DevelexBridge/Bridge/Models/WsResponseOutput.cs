@@ -26,8 +26,16 @@ public class WsResponseOutput(string type) : WsBaseResponseMessage(type)
     public long Timestamp { get; set; }
     
     [JsonPropertyName("fixationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FixationId { get; set; }
     
     [JsonPropertyName("fixationDuration")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public float? FixationDuration { get; set; }
+    
+    [JsonPropertyName("pupilDiameterL")]
+    public double LeftPupil { get; set; }
+    
+    [JsonPropertyName("pupilDiameterR")]
+    public double RightPupil { get; set; }
 }
