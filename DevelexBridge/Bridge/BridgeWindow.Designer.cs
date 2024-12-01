@@ -46,8 +46,8 @@ namespace Bridge
             buttonStartStop.FlatAppearance.BorderSize = 0;
             buttonStartStop.Paint += buttonStartStop_Paint;
 
-            buttonStartStop.MouseEnter += (sender, e) => buttonStartStop.BackColor = hoverColor;
-            buttonStartStop.MouseLeave += (sender, e) => buttonStartStop.BackColor = normalColor;
+            buttonStartStop.MouseEnter += (_, _) => buttonStartStop.BackColor = hoverColor;
+            buttonStartStop.MouseLeave += (_, _) => buttonStartStop.BackColor = normalColor;
             buttonStartStop.Click += startStopButton_Click;
 
             // 
