@@ -1,22 +1,25 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
+using Bridge.Extensions;
 using Bridge.Models;
 
 namespace Bridge.EyeTrackers.OpenGaze;
 
-public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
+public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
-    public override Func<WsBaseResponseMessage, Task> WsResponse { get; init; } = wsResponse;
+    public override Func<object, Task> WsResponse { get; init; } = wsResponse;
     
     private TcpClient? _tpcClient = null;
     private NetworkStream? _dataFeeder = null;
     private StreamWriter? _dataWriter = null;
     private Thread? _thread = null;
     private bool _isRunning = false;
+    private readonly SemaphoreSlim _calibrateLock = new(1, 1);
     
     public override async Task Connect()
     {
@@ -93,28 +96,72 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"1\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"1\" />\\r\\n");
         await _dataWriter.FlushAsync();
-
-        byte[] buffer = new byte[1024];
-        int bytesRead;
         
-        // TODO: timeout
-        while ((bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length)) > 0)
+        var timeout = TimeSpan.FromSeconds(5);
+        var cancellationTokenSource = new CancellationTokenSource(timeout);
+        var cancellationToken = cancellationTokenSource.Token;
+
+        var buffer = new byte[1024];
+        var successfullySent = false;
+
+        try
         {
-            string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-            Console.WriteLine($"Received: {data}");
-
-            if (data.Contains("<CAL ID=\"CALIB_RESULT\""))
+            while (true)
             {
-                break;
+                await _calibrateLock.WaitAsync(cancellationToken);
+
+                try
+                {
+                    var readTask = _dataFeeder.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+
+                    if (await Task.WhenAny(readTask, Task.Delay(timeout, cancellationToken)) == readTask)
+                    {
+                        var bytesRead = await readTask;
+                        
+                        if (bytesRead <= 0) break;
+
+                        var data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+                        if (data.Contains("<CAL ID=\"CALIB_RESULT\""))
+                        {
+                            successfullySent = true;
+                            DecodeData(data);
+                            
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        throw new TimeoutException("calibration time limit exceeded");
+                    }
+                }
+                finally
+                {
+                    _calibrateLock.Release();
+                }
             }
+        }
+        catch (Exception ex) when (ex is TimeoutException || ex is OperationCanceledException)
+        {
+            successfullySent = false;
+        }
+        finally
+        {
+            cancellationTokenSource.Dispose();
         }
         
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />\\r\\n");
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\\r\\n");
         await _dataWriter.FlushAsync();
 
-        await WsResponse(new WsBaseResponseMessage("calibrated"));
+        if (successfullySent)
+        {
+            await WsResponse(new WsBaseResponseMessage("calibrated"));
+        }
+        else
+        {
+            await WsResponse(new WsErrorResponseMessage("calibration failed"));
+        }
     }
 
     public override async Task Disconnect()
@@ -140,16 +187,15 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
             if (State == EyeTrackerState.Started && _dataFeeder != null)
             {
                 byte[] buffer = new byte[1024];
-                int bytesRead;
-
-                while ((bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                {
-                    string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-                    Console.WriteLine($"Received: {data}");
-
-                    DecodeData(data);
-                }
+                int bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length);
+                
+                if (bytesRead <= 0) continue;
+                
+                string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                
+                // Console.WriteLine($"Received: {data}");
+                
+                DecodeData(data);
             }
         }
     }
@@ -178,13 +224,13 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
                 parts.RemoveAt(0);
             }
 
-            int lastIndex = parts.Count - 1;
+            var lastIndex = parts.Count - 1;
 
             if (parts[lastIndex].StartsWith("/>"))
             {
                 parts.RemoveAt(lastIndex);
             }
-
+            
             foreach (var part in parts)
             {
                 var keyValue = part.Split("=").Where(s => !string.IsNullOrEmpty(s)).ToList();
@@ -193,10 +239,10 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
                 {
                     continue;
                 }
-
+                
                 keyValueData[keyValue[0]] = keyValue[1].Trim('"');
             }
-
+            
             var parsedData = ParseData(keyValueData);
             
             WsResponse(parsedData);
@@ -207,18 +253,20 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
     {
         var outputData = new WsResponseOutput("point");
 
-        outputData.LeftX = double.Parse(data["xL"]);
-        outputData.LeftY = double.Parse(data["yL"]);
-        outputData.RightX = double.Parse(data["xR"]);
-        outputData.RightY = double.Parse(data["yR"]);
-        outputData.LeftValidity = bool.Parse(data["validityL"]);
-        outputData.RightValidity = bool.Parse(data["validityR"]);
+        outputData.LeftX = data.Get("LPOGX", "0").ParseDouble();
+        outputData.LeftY = data.Get("LPOGY", "0").ParseDouble();
+        outputData.RightX = data.Get("RPOGX", "0").ParseDouble();
+        outputData.RightY = data.Get("RPOGY", "0").ParseDouble();
+        outputData.LeftValidity = data.Get("LPOGV", "0") == "1";
+        outputData.RightValidity = data.Get("RPOGV", "0") == "1";
+        outputData.LeftPupil = data.Get("LPD", "0").ParseDouble();
+        outputData.RightPupil = data.Get("RPD", "0").ParseDouble();
         outputData.Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
 
-        if (data["FPOGV"] == "1")
+        if (data.Get("FPOGV", "0") == "1")
         {
-            outputData.FixationId = data["fixationId"];
-            outputData.FixationDuration = int.Parse(data["fixationDuration"]);
+            outputData.FixationId = data.Get("FPOGID", "0");
+            outputData.FixationDuration = data.Get("FPOGD", "0").ParseInt();
         }
 
         return outputData;
@@ -238,12 +286,12 @@ public class OpenGaze(Func<WsBaseResponseMessage, Task> wsResponse) : EyeTracker
         
         if (_dataWriter != null)
         {
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\\r\\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\\r\\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\\r\\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"{stateValue}\" />\\r\\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"{stateValue}\" />\\r\\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_DATA\" STATE=\"{stateValue}\" />\\r\\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_DATA\" STATE=\"{stateValue}\" />\r\n");
         }
     }
 }

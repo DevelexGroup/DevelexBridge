@@ -7,7 +7,7 @@ public abstract class EyeTracker
 {
     public abstract EyeTrackerState State { get; set; }
 
-    public abstract Func<WsBaseResponseMessage, Task> WsResponse { get; init; }
+    public abstract Func<object, Task> WsResponse { get; init; }
     
     public abstract Task Connect();
     public abstract Task Start();
