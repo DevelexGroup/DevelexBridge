@@ -18,7 +18,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
     private NetworkStream? _dataFeeder = null;
     private StreamWriter? _dataWriter = null;
     private Thread? _thread = null;
-    private bool _isRunning = false;
+    private CancellationTokenSource _threadCancel = new();
     private readonly SemaphoreSlim _calibrateLock = new(1, 1);
     
     public override async Task Connect()
@@ -50,11 +50,11 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         {
             throw new EyeTrackerNotConnected("zařízení není připojené");
         }
-
+        
         await ToggleSendingData(true);
         await _dataWriter.FlushAsync();
         
-        _isRunning = true;
+        _threadCancel = new();
         _thread = new Thread(DataThread);
         _thread.IsBackground = true;
         _thread.Start();
@@ -76,9 +76,10 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
         if (_thread != null)
         {
-            _isRunning = false;
+            _threadCancel.Cancel();
             _thread.Join();
             _thread = null;
+            _threadCancel.Dispose();
         }
 
         State = EyeTrackerState.Stopped;
@@ -92,14 +93,14 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         {
             throw new EyeTrackerNotConnected("zařízení není připojené");
         }
+
+        State = EyeTrackerState.Calibrating;
         
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"1\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"1\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"1\" />\r\n");
+        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"1\" />\r\n");
         await _dataWriter.FlushAsync();
         
         var timeout = TimeSpan.FromSeconds(5);
-        var cancellationTokenSource = new CancellationTokenSource(timeout);
-        var cancellationToken = cancellationTokenSource.Token;
 
         var buffer = new byte[1024];
         var successfullySent = false;
@@ -108,12 +109,15 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         {
             while (true)
             {
+                var cancellationTokenSource = new CancellationTokenSource(timeout);
+                var cancellationToken = cancellationTokenSource.Token;
+                
                 await _calibrateLock.WaitAsync(cancellationToken);
 
                 try
                 {
                     var readTask = _dataFeeder.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
-
+                    
                     if (await Task.WhenAny(readTask, Task.Delay(timeout, cancellationToken)) == readTask)
                     {
                         var bytesRead = await readTask;
@@ -138,6 +142,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
                 finally
                 {
                     _calibrateLock.Release();
+                    cancellationTokenSource.Dispose();
                 }
             }
         }
@@ -145,14 +150,12 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         {
             successfullySent = false;
         }
-        finally
-        {
-            cancellationTokenSource.Dispose();
-        }
         
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />\\r\\n");
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\\r\\n");
+        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />\r\n");
+        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\r\n");
         await _dataWriter.FlushAsync();
+
+        State = EyeTrackerState.Stopped;
 
         if (successfullySent)
         {
@@ -182,65 +185,54 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
     private async void DataThread()
     {
-        while (_isRunning)
+        while (!_threadCancel.IsCancellationRequested)
         {
-            if (State == EyeTrackerState.Started && _dataFeeder != null)
+            if (State != EyeTrackerState.Started || _dataFeeder == null) continue;
+            
+            var buffer = new byte[1024];
+
+            try
             {
-                byte[] buffer = new byte[1024];
-                int bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length);
-                
+                var bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length, _threadCancel.Token);
+
                 if (bytesRead <= 0) continue;
-                
-                string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                
+
+                var data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
                 // Console.WriteLine($"Received: {data}");
-                
+
                 DecodeData(data);
+            }
+            catch (Exception ex)
+            {
             }
         }
     }
 
     private void DecodeData(string data)
     {
-        var lines = data.Split("\n").Where(s => !string.IsNullOrEmpty(s)).ToList();
+        var lines = data.Split("\n", StringSplitOptions.RemoveEmptyEntries);
         var keyValueData = new Dictionary<string, string>();
 
         foreach (var line in lines)
         {
-            if (!line.StartsWith("<REC"))
-            {
-                continue;
-            }
+            if (!line.StartsWith("<REC")) continue;
             
-            var parts = line.Split(" ").Where(s => !string.IsNullOrEmpty(s)).ToList();
+            var parts = line
+                .Split(" ", StringSplitOptions.RemoveEmptyEntries)
+                .Where(part => !part.StartsWith("<REC") && !part.StartsWith("/>"))
+                .ToArray();
 
-            if (parts.Count < 2)
-            {
-                continue;
-            }
-
-            if (parts[0].StartsWith("<REC"))
-            {
-                parts.RemoveAt(0);
-            }
-
-            var lastIndex = parts.Count - 1;
-
-            if (parts[lastIndex].StartsWith("/>"))
-            {
-                parts.RemoveAt(lastIndex);
-            }
+            if (parts.Length <= 0) continue;
             
             foreach (var part in parts)
             {
-                var keyValue = part.Split("=").Where(s => !string.IsNullOrEmpty(s)).ToList();
+                var keyValue = part.Split("=", StringSplitOptions.RemoveEmptyEntries);
 
-                if (keyValue.Count != 2)
+                if (keyValue.Length == 2)
                 {
-                    continue;
+                    keyValueData[keyValue[0]] = keyValue[1].Trim('"');
                 }
-                
-                keyValueData[keyValue[0]] = keyValue[1].Trim('"');
             }
             
             var parsedData = ParseData(keyValueData);
@@ -252,7 +244,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
     private WsResponseOutput ParseData(Dictionary<string, string> data)
     {
         var outputData = new WsResponseOutput("point");
-
+        
         outputData.LeftX = data.Get("LPOGX", "0").ParseDouble();
         outputData.LeftY = data.Get("LPOGY", "0").ParseDouble();
         outputData.RightX = data.Get("RPOGX", "0").ParseDouble();
@@ -277,7 +269,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
     [MemberNotNullWhen(true, nameof(_dataWriter))]
     private bool IsConnected()
     {
-        return _tpcClient != null && _tpcClient.Connected && _dataFeeder != null && _dataWriter != null;
+        return _tpcClient != null && _dataFeeder != null && _dataWriter != null;
     }
 
     private async Task ToggleSendingData(bool state)

@@ -7,4 +7,5 @@ public enum EyeTrackerState
     Connected,
     Stopped,
     Started,
+    Calibrating,
 }
