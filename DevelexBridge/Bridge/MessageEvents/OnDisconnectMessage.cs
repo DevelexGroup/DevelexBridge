@@ -13,6 +13,11 @@ public partial class BridgeWindow
             await WsErrorDeviceNotConnected();
             return;
         }
+
+        if (EyeTracker.State == EyeTrackerState.Started)
+        {
+            await EyeTracker.Stop();
+        }
         
         await EyeTracker.Disconnect();
         EyeTracker = null;

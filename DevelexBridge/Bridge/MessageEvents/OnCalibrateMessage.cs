@@ -19,6 +19,11 @@ public partial class BridgeWindow
             await WsErrorDeviceConnecting();
             return;
         }
+
+        if (EyeTracker.State == EyeTrackerState.Started)
+        {
+            await EyeTracker.Stop();
+        }
         
         await EyeTracker.Calibrate();
     }
