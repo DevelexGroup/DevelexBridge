@@ -3,20 +3,56 @@ using Bridge.Enums;
 
 namespace Bridge.Models;
 
-public class WsBaseResponseMessage(string type)
+public class WsResponseIdentifiers(WsMessageIdentifiers identifiers)
+{
+    [JsonPropertyName("correlationId")]
+    public int CorrelationId { get; init; } = identifiers.CorrelationId;
+
+    [JsonPropertyName("initiatorId")]
+    public string InitiatorId { get; init; } = identifiers.InitiatorId;
+}
+
+public class WsResponseMessage(string responseTo, EyeTracker eyeTracker, WsMessageIdentifiers identifiers)
+    : WsResponseIdentifiers(identifiers)
+{
+    [JsonPropertyName("responseTo")]
+    public string ResponseTo { get; set; } = responseTo;
+
+    [JsonPropertyName("status")]
+    public EyeTrackerState Status { get; set; } = eyeTracker.State;
+
+    [JsonPropertyName("trackerCalibration")]
+    public DateTime? TrackerCalibration { get; set; } = eyeTracker.LastCalibration;
+}
+
+public class WsTypeResponseMessage(string type)
 {
     [JsonPropertyName("type")]
     public string Type { get; set; } = type;
 }
 
-public class WsErrorResponseMessage(string message) : WsBaseResponseMessage("error")
+public class WsTypeResponseMessageWithIdentifiers(string type, WsMessageIdentifiers identifiers)
+    : WsResponseIdentifiers(identifiers)
 {
-    [JsonPropertyName("message")]
-    public string Message { get; set; } = message;
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = type;
 }
 
-public class WsStatusResponseMessage(EyeTrackerState state) : WsBaseResponseMessage("status")
+public class WsErrorResponseMessage(string message) : WsTypeResponseMessage("error")
 {
-    [JsonPropertyName("state")]
-    public EyeTrackerState State { get; set; } = state;
+    [JsonPropertyName("content")]
+    public string Message { get; set; } = message;
+    
+    [JsonPropertyName("timestamp")]
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
+public class WsBridgeResponseMessage(string message, WsMessageIdentifiers identifiers)
+    : WsTypeResponseMessageWithIdentifiers("message", identifiers)
+{
+    [JsonPropertyName("content")]
+    public string Message { get; set; } = message;
+    
+    [JsonPropertyName("timestamp")]
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 }
