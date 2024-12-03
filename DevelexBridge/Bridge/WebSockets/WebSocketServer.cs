@@ -262,4 +262,19 @@ public class WebSocketServer : IDisposable
 
         return false;
     }
+
+    public void DisconnectClient(Guid guid)
+    {
+        if (_clients.TryGetValue(guid, out var clientMetadata))
+        {
+            lock (clientMetadata)
+            {
+                clientMetadata.WebSocket
+                    .CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", clientMetadata.TokenSource.Token)
+                    .Wait();
+                clientMetadata.TokenSource.Cancel();
+                clientMetadata.WebSocket.Dispose();
+            }
+        }
+    }
 }
