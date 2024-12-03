@@ -13,4 +13,18 @@ public partial class BridgeWindow
     {
         return SendToAll(new WsErrorResponseMessage("device is connecting"));
     }
+
+    private async Task<bool> TryStop(EyeTracker eyeTracker)
+    {
+        try
+        {
+            await eyeTracker.Stop();
+            return true;
+        }
+        catch (Exception e)
+        {
+            await SendToAll(new WsErrorResponseMessage(e.Message));
+            return false;
+        }
+    }
 }
