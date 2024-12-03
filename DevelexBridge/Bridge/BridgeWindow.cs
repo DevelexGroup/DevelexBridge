@@ -93,6 +93,12 @@ public partial class BridgeWindow : Form
             case WsBridgeStatusMessage bridgeStatusMessage:
                 await OnBridgeStateMessage(clientMetadata, bridgeStatusMessage);
                 break;
+            case WsSubscribeMessage subscribeMessage:
+                await OnSubscribeMessage(clientMetadata, subscribeMessage);
+                break;
+            case WsUnsubscribeMessage unsubscribeMessage:
+                await OnUnsubscribeMessage(clientMetadata, unsubscribeMessage);
+                break;
         }
     }
     
@@ -117,6 +123,8 @@ public partial class BridgeWindow : Form
                 "calibrate" => JsonSerializer.Deserialize<WsCalibrateMessage>(message),
                 "disconnect" => JsonSerializer.Deserialize<WsDisconnectMessage>(message),
                 "status" => JsonSerializer.Deserialize<WsBridgeStatusMessage>(message),
+                "subscribe" => JsonSerializer.Deserialize<WsSubscribeMessage>(message),
+                "unsubscribe" => JsonSerializer.Deserialize<WsUnsubscribeMessage>(message),
                 _ => null,
             };
 
