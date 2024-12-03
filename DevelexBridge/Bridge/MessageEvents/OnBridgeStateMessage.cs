@@ -13,6 +13,6 @@ public partial class BridgeWindow
             return;
         }
 
-        await SendToAll(new WsStatusResponseMessage(EyeTracker.State));
+        await SendToAll(new WsResponseMessage("status", EyeTracker, message.Identifiers));
     }
 }

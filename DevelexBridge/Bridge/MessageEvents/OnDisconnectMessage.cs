@@ -16,10 +16,28 @@ public partial class BridgeWindow
 
         if (EyeTracker.State == EyeTrackerState.Started)
         {
-            await EyeTracker.Stop();
+            if (!await TryStop(EyeTracker))
+            {
+                return;
+            }
         }
         
-        await EyeTracker.Disconnect();
-        EyeTracker = null;
+        try
+        {
+            var result = await EyeTracker.Disconnect();
+
+            if (result)
+            {
+                await SendToAll(new WsResponseMessage("disconnect", EyeTracker, message.Identifiers));
+            }
+        }
+        catch (Exception ex)
+        {
+            await SendToAll(new WsErrorResponseMessage(ex.Message));
+        }
+        finally
+        {
+            EyeTracker = null;
+        }
     }
 }

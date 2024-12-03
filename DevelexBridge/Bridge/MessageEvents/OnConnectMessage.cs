@@ -25,7 +25,7 @@ public partial class BridgeWindow
             }
         }
         
-        switch (message.Tracker)
+        switch (message.Config.TrackerType)
         {
             case "opengaze":
                 var og = new OpenGaze(SendToAll);
@@ -37,7 +37,12 @@ public partial class BridgeWindow
         {
             try
             {
-                await EyeTracker.Connect();
+                var result = await EyeTracker.Connect();
+
+                if (result)
+                {
+                    await SendToAll(new WsResponseMessage("connect", EyeTracker, message.Identifiers));
+                }
             }
             catch (Exception ex)
             {

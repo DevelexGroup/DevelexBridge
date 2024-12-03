@@ -20,6 +20,18 @@ public partial class BridgeWindow
             return;
         }
         
-        await EyeTracker.Start();
+        try
+        {
+            var result = await EyeTracker.Start();
+
+            if (result)
+            {
+                await SendToAll(new WsResponseMessage("start", EyeTracker, message.Identifiers));
+            }
+        }
+        catch (Exception ex)
+        {
+            await SendToAll(new WsErrorResponseMessage(ex.Message));
+        }
     }
 }

@@ -22,9 +22,24 @@ public partial class BridgeWindow
 
         if (EyeTracker.State == EyeTrackerState.Started)
         {
-            await EyeTracker.Stop();
+            if (!await TryStop(EyeTracker))
+            {
+                return;
+            }
         }
         
-        await EyeTracker.Calibrate();
+        try
+        {
+            var result = await EyeTracker.Calibrate();
+
+            if (result)
+            {
+                await SendToAll(new WsResponseMessage("connect", EyeTracker, message.Identifiers));
+            }
+        }
+        catch (Exception ex)
+        {
+            await SendToAll(new WsErrorResponseMessage(ex.Message));
+        }
     }
 }
