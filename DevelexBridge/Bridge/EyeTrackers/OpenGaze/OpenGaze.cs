@@ -13,6 +13,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
     public override Func<object, Task> WsResponse { get; init; } = wsResponse;
+    public override DateTime? LastCalibration  { get; set; } = null;
     
     private TcpClient? _tpcClient = null;
     private NetworkStream? _dataFeeder = null;
@@ -21,7 +22,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
     private CancellationTokenSource _threadCancel = new();
     private readonly SemaphoreSlim _calibrateLock = new(1, 1);
     
-    public override async Task Connect()
+    public override async Task<bool> Connect()
     {
         State = EyeTrackerState.Connecting;
         
@@ -41,10 +42,12 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
         State = EyeTrackerState.Connected;
 
-        await WsResponse(new WsBaseResponseMessage("connected"));
+        await Task.Delay(1);
+
+        return true;
     }
 
-    public override async Task Start()
+    public override async Task<bool> Start()
     {
         if (!IsConnected())
         {
@@ -61,10 +64,10 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
         State = EyeTrackerState.Started;
 
-        await WsResponse(new WsBaseResponseMessage("started"));
+        return true;
     }
 
-    public override async Task Stop()
+    public override async Task<bool> Stop()
     {
         if (!IsConnected())
         {
@@ -84,10 +87,10 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
         State = EyeTrackerState.Stopped;
 
-        await WsResponse(new WsBaseResponseMessage("stopped"));
+        return true;
     }
 
-    public override async Task Calibrate()
+    public override async Task<bool> Calibrate()
     {
         if (!IsConnected())
         {
@@ -157,17 +160,10 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
         State = EyeTrackerState.Stopped;
 
-        if (successfullySent)
-        {
-            await WsResponse(new WsBaseResponseMessage("calibrated"));
-        }
-        else
-        {
-            await WsResponse(new WsErrorResponseMessage("calibration failed"));
-        }
+        return successfullySent;
     }
 
-    public override async Task Disconnect()
+    public override async Task<bool> Disconnect()
     {
         if (!IsConnected())
         {
@@ -179,8 +175,10 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         _tpcClient.Close();
 
         State = EyeTrackerState.Disconnected;
-        
-        await WsResponse(new WsBaseResponseMessage("disconnected"));
+
+        await Task.Delay(1);
+
+        return true;
     }
 
     private async void DataThread()

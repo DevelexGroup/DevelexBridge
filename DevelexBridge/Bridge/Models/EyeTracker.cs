@@ -8,10 +8,11 @@ public abstract class EyeTracker
     public abstract EyeTrackerState State { get; set; }
 
     public abstract Func<object, Task> WsResponse { get; init; }
+    public abstract DateTime? LastCalibration { get; set; }
     
-    public abstract Task Connect();
-    public abstract Task Start();
-    public abstract Task Stop();
-    public abstract Task Calibrate();
-    public abstract Task Disconnect();
+    public abstract Task<bool> Connect();
+    public abstract Task<bool> Start();
+    public abstract Task<bool> Stop();
+    public abstract Task<bool> Calibrate();
+    public abstract Task<bool> Disconnect();
 }
