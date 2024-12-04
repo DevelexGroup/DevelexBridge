@@ -6,7 +6,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnDisconnectMessage(WsClientMetadata clientMetadata, WsDisconnectMessage message)
+    private async Task OnDisconnectMessage(WsClientMetadata clientMetadata, WsIncomingDisconnectMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
@@ -28,12 +28,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsResponseMessage("disconnect", EyeTracker, message.Identifiers));
+                await SendToAll(new WsOutgoingResponseMessage("disconnect", EyeTracker, message.Identifiers));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsErrorResponseMessage(ex.Message));
+            await SendToAll(new WsOutgoingErrorMessage(ex.Message));
         }
         finally
         {

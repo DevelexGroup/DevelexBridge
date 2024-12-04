@@ -5,7 +5,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnBridgeStateMessage(WsClientMetadata clientMetadata, WsBridgeStatusMessage message)
+    private async Task OnBridgeStateMessage(WsClientMetadata clientMetadata, WsIncomingBridgeStateMessage message)
     {
         if (EyeTracker == null)
         {
@@ -13,6 +13,6 @@ public partial class BridgeWindow
             return;
         }
 
-        await SendToAll(new WsResponseMessage("status", EyeTracker, message.Identifiers));
+        await SendToAll(new WsOutgoingResponseMessage("status", EyeTracker, message.Identifiers));
     }
 }

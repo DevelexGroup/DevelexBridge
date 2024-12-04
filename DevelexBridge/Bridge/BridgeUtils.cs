@@ -6,12 +6,12 @@ public partial class BridgeWindow
 {
     private Task WsErrorDeviceNotConnected()
     {
-        return SendToAll(new WsErrorResponseMessage("device is not connected"));
+        return SendToAll(new WsOutgoingErrorMessage("device is not connected"));
     }
 
     private Task WsErrorDeviceConnecting()
     {
-        return SendToAll(new WsErrorResponseMessage("device is connecting"));
+        return SendToAll(new WsOutgoingErrorMessage("device is connecting"));
     }
 
     private async Task<bool> TryStop(EyeTracker eyeTracker)
@@ -23,7 +23,7 @@ public partial class BridgeWindow
         }
         catch (Exception e)
         {
-            await SendToAll(new WsErrorResponseMessage(e.Message));
+            await SendToAll(new WsOutgoingErrorMessage(e.Message));
             return false;
         }
     }

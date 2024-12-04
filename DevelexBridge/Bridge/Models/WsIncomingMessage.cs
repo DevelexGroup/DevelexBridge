@@ -11,7 +11,7 @@ public class WsMessageIdentifiers
     public required string InitiatorId { get; init; }
 }
 
-public class WsBaseMessage : WsMessageIdentifiers
+public class WsIncomingMessage : WsMessageIdentifiers
 {
     [JsonPropertyName("type")]
     public required string Type { get; set; }
@@ -20,55 +20,55 @@ public class WsBaseMessage : WsMessageIdentifiers
         { CorrelationId = CorrelationId, InitiatorId = InitiatorId };
 }
 
-public class WsConnectMessage : WsBaseMessage
+public class WsIncomingConnectMessage : WsIncomingMessage
 {
     [JsonPropertyName("config")]
-    public required WsConnectEyeTrackerConfig Config { get; set; }
+    public required ConnectEyeTrackerConfig Config { get; set; }
 }
 
-public class WsConnectEyeTrackerConfig
+public class ConnectEyeTrackerConfig
 {
     [JsonPropertyName("trackerType")]
     public required string TrackerType { get; set; }
 }
 
-public class WsStartMessage : WsBaseMessage
+public class WsIncomingStartMessage : WsIncomingMessage
 {
     
 }
 
-public class WsStopMessage : WsBaseMessage
+public class WsIncomingStopMessage : WsIncomingMessage
 {
     
 }
 
-public class WsCalibrateMessage : WsBaseMessage
+public class WsIncomingCalibrateMessage : WsIncomingMessage
 {
     
 }
 
-public class WsDisconnectMessage : WsBaseMessage
+public class WsIncomingDisconnectMessage : WsIncomingMessage
 {
     
 }
 
-public class WsBridgeStatusMessage : WsBaseMessage
+public class WsIncomingBridgeStateMessage : WsIncomingMessage
 {
     
 }
 
-public class WsBridgeMessage : WsBaseMessage
+public class WsIncomingBridgeMessage : WsIncomingMessage
 {
     [JsonPropertyName("content")]
     public required string Content { get; set; }
 }
 
-public class WsSubscribeMessage : WsBaseMessage
+public class WsIncomingSubscribeMessage : WsIncomingMessage
 {
     
 }
 
-public class WsUnsubscribeMessage : WsBaseMessage
+public class WsIncomingUnsubscribeMessage : WsIncomingMessage
 {
     
 }

@@ -4,7 +4,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnUnsubscribeMessage(WsClientMetadata clientMetadata, WsUnsubscribeMessage message)
+    private async Task OnUnsubscribeMessage(WsClientMetadata clientMetadata, WsIncomingUnsubscribeMessage message)
     {
         if (Server == null)
         {
@@ -18,6 +18,6 @@ public partial class BridgeWindow
         }
 
         Server.DisconnectClient(clientMetadata.Id);
-        await SendToAll(new WsResponseMessage("unsubscribe", EyeTracker, message.Identifiers));
+        await SendToAll(new WsOutgoingResponseMessage("unsubscribe", EyeTracker, message.Identifiers));
     }
 }

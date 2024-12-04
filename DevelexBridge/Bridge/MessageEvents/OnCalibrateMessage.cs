@@ -6,7 +6,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnCalibrateMessage(WsClientMetadata clientMetadata, WsCalibrateMessage message)
+    private async Task OnCalibrateMessage(WsClientMetadata clientMetadata, WsIncomingCalibrateMessage message)
     {
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
@@ -34,12 +34,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsResponseMessage("connect", EyeTracker, message.Identifiers));
+                await SendToAll(new WsOutgoingResponseMessage("connect", EyeTracker, message.Identifiers));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsErrorResponseMessage(ex.Message));
+            await SendToAll(new WsOutgoingErrorMessage(ex.Message));
         }
     }
 }

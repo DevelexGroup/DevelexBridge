@@ -239,19 +239,20 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
         }
     }
 
-    private WsResponseOutput ParseData(Dictionary<string, string> data)
+    private WsOutgoingGazeMessage ParseData(Dictionary<string, string> data)
     {
-        var outputData = new WsResponseOutput("gaze");
-        
-        outputData.LeftX = data.Get("LPOGX", "0").ParseDouble();
-        outputData.LeftY = data.Get("LPOGY", "0").ParseDouble();
-        outputData.RightX = data.Get("RPOGX", "0").ParseDouble();
-        outputData.RightY = data.Get("RPOGY", "0").ParseDouble();
-        outputData.LeftValidity = data.Get("LPOGV", "0") == "1";
-        outputData.RightValidity = data.Get("RPOGV", "0") == "1";
-        outputData.LeftPupil = data.Get("LPD", "0").ParseDouble();
-        outputData.RightPupil = data.Get("RPD", "0").ParseDouble();
-        outputData.Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        var outputData = new WsOutgoingGazeMessage
+        {
+            LeftX = data.Get("LPOGX", "0").ParseDouble(),
+            LeftY = data.Get("LPOGY", "0").ParseDouble(),
+            RightX = data.Get("RPOGX", "0").ParseDouble(),
+            RightY = data.Get("RPOGY", "0").ParseDouble(),
+            LeftValidity = data.Get("LPOGV", "0") == "1",
+            RightValidity = data.Get("RPOGV", "0") == "1",
+            LeftPupil = data.Get("LPD", "0").ParseDouble(),
+            RightPupil = data.Get("RPD", "0").ParseDouble(),
+            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+        };
 
         if (data.Get("FPOGV", "0") == "1")
         {

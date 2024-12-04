@@ -4,7 +4,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnSubscribeMessage(WsClientMetadata clientMetadata, WsSubscribeMessage message)
+    private async Task OnSubscribeMessage(WsClientMetadata clientMetadata, WsIncomingSubscribeMessage message)
     {
         if (EyeTracker == null)
         {
@@ -12,6 +12,6 @@ public partial class BridgeWindow
             return;
         }
         
-        await SendToAll(new WsResponseMessage("subscribe", EyeTracker, message.Identifiers));
+        await SendToAll(new WsOutgoingResponseMessage("subscribe", EyeTracker, message.Identifiers));
     }
 }

@@ -9,7 +9,7 @@ using Bridge.Output;
 namespace Bridge.WebSockets;
 
 /**
- * This WebSocket Server is improved version for Develex purposees from
+ * This WebSocket Server is improved version for Develex purposes from
  * WatsonWebSocket Server (https://github.com/jchristn/WatsonWebsocket/blob/master/src/WatsonWebsocket/WatsonWsServer.cs)
  */
 public class WebSocketServer : IDisposable
@@ -18,10 +18,10 @@ public class WebSocketServer : IDisposable
     private CancellationTokenSource _cancellationTokenSource = new();
     private CancellationToken _cancellationToken;
     public string IpPort { get; }
-    private Func<WsMessageRecievedArgs, Task> MessageHandler { get; }
+    private Func<WsRecievedMessageData, Task> MessageHandler { get; }
     private readonly ConcurrentDictionary<Guid, WsClientMetadata> _clients = new();
 
-    public WebSocketServer(string ipPort, Func<WsMessageRecievedArgs, Task> messageHandler)
+    public WebSocketServer(string ipPort, Func<WsRecievedMessageData, Task> messageHandler)
     {
         IpPort = ipPort;
         MessageHandler = messageHandler;
@@ -154,7 +154,7 @@ public class WebSocketServer : IDisposable
         }
     }
 
-    private async Task<WsMessageRecievedArgs> MessageReadAsync(WsClientMetadata clientMetadata, byte[] buffer)
+    private async Task<WsRecievedMessageData> MessageReadAsync(WsClientMetadata clientMetadata, byte[] buffer)
     {
         using var stream = new MemoryStream(buffer);
         var segment = new ArraySegment<byte>(buffer);
@@ -186,7 +186,7 @@ public class WebSocketServer : IDisposable
             {
                 var resultMessage = Encoding.UTF8.GetString(stream.ToArray(), 0, result.Count);
                     
-                return new WsMessageRecievedArgs(clientMetadata, resultMessage, result.MessageType);
+                return new WsRecievedMessageData(clientMetadata, resultMessage, result.MessageType);
             }
         }
     }

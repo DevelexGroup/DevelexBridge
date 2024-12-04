@@ -8,7 +8,7 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnConnectMessage(WsClientMetadata clientMetadata, WsConnectMessage message)
+    private async Task OnConnectMessage(WsClientMetadata clientMetadata, WsIncomingConnectMessage message)
     {
         if (EyeTracker != null)
         {
@@ -20,7 +20,7 @@ public partial class BridgeWindow
             
             if (EyeTracker.State == EyeTrackerState.Connected)
             {
-                await SendToAll(new WsErrorResponseMessage("device already connected"));
+                await SendToAll(new WsOutgoingErrorMessage("device already connected"));
                 return;
             }
         }
@@ -41,12 +41,12 @@ public partial class BridgeWindow
 
                 if (result)
                 {
-                    await SendToAll(new WsResponseMessage("connect", EyeTracker, message.Identifiers));
+                    await SendToAll(new WsOutgoingResponseMessage("connect", EyeTracker, message.Identifiers));
                 }
             }
             catch (Exception ex)
             {
-                await SendToAll(new WsErrorResponseMessage(ex.Message));
+                await SendToAll(new WsOutgoingErrorMessage(ex.Message));
             }
         }
     }

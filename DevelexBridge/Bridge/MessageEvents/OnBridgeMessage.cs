@@ -4,8 +4,8 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnTunnelMessage(WsClientMetadata clientMetadata, WsBridgeMessage message)
+    private async Task OnBridgeMessage(WsClientMetadata clientMetadata, WsIncomingBridgeMessage message)
     {
-        await SendToAll(new WsBridgeResponseMessage(message.Content, message.Identifiers));
+        await SendToAll(new WsOutgoingTunnelMessage(message.Content, message.Identifiers));
     }
 }
