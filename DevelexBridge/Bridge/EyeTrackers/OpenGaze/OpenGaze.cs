@@ -241,7 +241,7 @@ public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
 
     private WsResponseOutput ParseData(Dictionary<string, string> data)
     {
-        var outputData = new WsResponseOutput("point");
+        var outputData = new WsResponseOutput("gaze");
         
         outputData.LeftX = data.Get("LPOGX", "0").ParseDouble();
         outputData.LeftY = data.Get("LPOGY", "0").ParseDouble();
