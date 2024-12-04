@@ -70,7 +70,7 @@ partial class BridgeWindow
         tbConsoleContainer.CornerRadius = 5;
         tbConsoleContainer.InnerTextBox.Multiline = true;
         tbConsoleContainer.InnerTextBox.ReadOnly = true;
-        tbConsoleContainer.InnerTextBox.ScrollBars = ScrollBars.Vertical;
+        tbConsoleContainer.InnerTextBox.ScrollBars = RichTextBoxScrollBars.Vertical;
 
         // 
         // BridgeWindow

@@ -5,17 +5,17 @@ namespace Bridge;
 
 public class CustomTextBoxContainer : UserControl
 {
-    private readonly TextBox _innerTextBox;
+    private readonly RichTextBox _innerTextBox;
 
     public Color BorderColor { get; set; } = Color.FromArgb(55, 65, 81);
     public int BorderSize { get; set; } = 1;
     public int CornerRadius { get; set; } = 5;
 
-    public TextBox InnerTextBox => _innerTextBox;
+    public RichTextBox InnerTextBox => _innerTextBox;
 
     public CustomTextBoxContainer()
     {
-        _innerTextBox = new TextBox
+        _innerTextBox = new RichTextBox
         {
             BorderStyle = BorderStyle.None,
             BackColor = Color.White,
