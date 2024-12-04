@@ -2,38 +2,31 @@
 
 namespace Bridge.Output;
 
-internal class TextBoxConsole : TextWriter
+internal class TextBoxConsole(TextBox textBox) : TextWriter
 {
-    private readonly TextBox _textBox;
-
-    public TextBoxConsole(TextBox textBox)
-    {
-        _textBox = textBox;
-    }
-
     public override Encoding Encoding => Encoding.UTF8;
 
     public override void Write(char value)
     {
-        if (_textBox.InvokeRequired)
+        if (textBox.InvokeRequired)
         {
-            _textBox.Invoke(new Action<char>(Write), value);
+            textBox.Invoke(new Action<char>(Write), value);
         }
         else
         {
-            _textBox.AppendText(value.ToString());
+            textBox.AppendText(value.ToString());
         }
     }
 
-    public override void Write(string value)
+    public override void Write(string? value)
     {
-        if (_textBox.InvokeRequired)
+        if (textBox.InvokeRequired)
         {
-            _textBox.Invoke(new Action<string>(Write), value);
+            textBox.Invoke(new Action<string>(Write), value);
         }
         else
         {
-            _textBox.AppendText(value);
+            textBox.AppendText(value);
         }
     }
 }

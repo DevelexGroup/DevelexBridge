@@ -6,7 +6,7 @@ public partial class BridgeWindow
 {
     private Task WsErrorDeviceNotConnected()
     {
-        return SendToAll(new WsErrorResponseMessage("device not connected"));
+        return SendToAll(new WsErrorResponseMessage("device is not connected"));
     }
 
     private Task WsErrorDeviceConnecting()

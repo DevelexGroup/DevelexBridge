@@ -10,6 +10,12 @@ public partial class BridgeWindow
         {
             return;
         }
+        
+        if (EyeTracker == null)
+        {
+            await WsErrorDeviceNotConnected();
+            return;
+        }
 
         Server.DisconnectClient(clientMetadata.Id);
         await SendToAll(new WsResponseMessage("unsubscribe", EyeTracker, message.Identifiers));

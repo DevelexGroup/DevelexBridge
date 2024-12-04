@@ -2,63 +2,61 @@
 
 public static class ConsoleOutput
 {
+    public static readonly string Start = "Start";
+    public static readonly string Stop = "Stop";
+    
     public static void WsRecievingMessageError(string errorMessage)
     {
-        Console.WriteLine($"[WS] Nastala chyba při přijímaní zprávy: {errorMessage}");
-    }
-
-    public static void WsRecievedClose()
-    {
-        Console.WriteLine($"[WS] Klient poslal 'close', ukončuji s ním spojení.");
+        Console.WriteLine($"[WS] An error happened when recieving message: {errorMessage}");
     }
 
     public static void WsListenerError(string errorMessage)
     {
-        Console.WriteLine($"[WS] Nastala chyba při listeneru: {errorMessage}");
+        Console.WriteLine($"[WS] An error happened on http listener: {errorMessage}");
     }
 
     public static void WsListenerStopped()
     {
-        Console.WriteLine($"[WS] Listener byl násilně ukončen.");
+        Console.WriteLine($"[WS] Http listener was stopped.");
     }
 
     public static void WsStarted(string ipPort)
     {
-        Console.WriteLine($"[WS] Websocket byl úspěšně zapnut na {ipPort}.");
+        Console.WriteLine($"[WS] Websocket successfully started, running on \"{ipPort}\".");
     }
 
     public static void WsUnableToStart(string errorMessage)
     {
-        Console.WriteLine($"[WS] Nebylo možné spustit Websocket server: {errorMessage}");
+        Console.WriteLine($"[WS] An error happened while starting websocket server: {errorMessage}");
     }
 
     public static void WsStopped()
     {
-        Console.WriteLine($"[WS] Websocket byl úspěšně vypnut.");
+        Console.WriteLine($"[WS] Websocket server was successfully stopped.");
     }
 
     public static void WsMessageRecieved(string message)
     {
-        Console.WriteLine($"[WS] Nová zpráva: {message}");
+        Console.WriteLine($"[WS] New message recieved: {message}");
     }
 
     public static void WsUnableToParseMessage(string errorMessage)
     {
-        Console.WriteLine($"[WS] Nebylo možné sparsovat zprávu: {errorMessage}");
+        Console.WriteLine($"[WS] Unable to parse recieved message: {errorMessage}");
     }
 
     public static void InputWrongIpOrPort()
     {
-        Console.WriteLine($"Špatně zadaná IP nebo port.");
+        Console.WriteLine($"[WS] IP or port are invalid.");
     }
 
     public static void WsMessageWriteError(string message)
     {
-        Console.WriteLine($"[WS] Chyba při posílání zprávy: {message}");
+        Console.WriteLine($"[WS] An error happened while sending message: {message}");
     }
 
     public static void WsSendingToClients(string message, int clients)
     {
-        Console.WriteLine($"[WS] Posílám {clients} klientům zprávu: {message}");
+        Console.WriteLine($"[WS] Sending message to {clients} clients: {message}");
     }
 }

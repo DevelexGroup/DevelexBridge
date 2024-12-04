@@ -14,7 +14,7 @@ namespace Bridge.WebSockets;
  */
 public class WebSocketServer : IDisposable
 {
-    private HttpListener _httpListener;
+    private readonly HttpListener _httpListener;
     private CancellationTokenSource _cancellationTokenSource = new();
     private CancellationToken _cancellationToken;
     public string IpPort { get; }

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using Bridge.Exceptions.Parser;
 using Bridge.Models;
 using Bridge.Output;
 using Bridge.WebSockets;
@@ -35,13 +36,13 @@ public partial class BridgeWindow : Form
             try
             {
                 Server.Start();
-                buttonStartStop.Text = "Vypnout";
+                buttonStartStop.Text = ConsoleOutput.Stop;
                 ConsoleOutput.WsStarted(ipPort);
             }
             catch (Exception ex)
             {
                 Server = null;
-                buttonStartStop.Text = "Zapnout";
+                buttonStartStop.Text = ConsoleOutput.Start;
                 ConsoleOutput.WsUnableToStart(ex.Message);
             }
         }
@@ -53,7 +54,7 @@ public partial class BridgeWindow : Form
                 Server.Dispose();
                 Server = null;
                 
-                buttonStartStop.Text = "Zapnout";
+                buttonStartStop.Text = ConsoleOutput.Start;
                 buttonStartStop.Enabled = true;
                 ConsoleOutput.WsStopped();
             });
@@ -67,73 +68,76 @@ public partial class BridgeWindow : Form
         
         ConsoleOutput.WsMessageRecieved(message);
 
-        if (!TryParseWebsocketMessage(message, out var parsedMessage))
-        {
-            ConsoleOutput.WsUnableToParseMessage("neznámý typ zprávy");
-            return;
-        }
-
-        switch (parsedMessage)
-        {
-            case WsConnectMessage connectMessage:
-                await OnConnectMessage(clientMetadata, connectMessage);
-                break;
-            case WsStartMessage startMessage:
-                await OnStartMessage(clientMetadata, startMessage);
-                break;
-            case WsStopMessage stopMessage:
-                await OnStopMessage(clientMetadata, stopMessage);
-                break;
-            case WsCalibrateMessage calibrateMessage:
-                await OnCalibrateMessage(clientMetadata, calibrateMessage);
-                break;
-            case WsDisconnectMessage disconnectMessage:
-                await OnDisconnectMessage(clientMetadata, disconnectMessage);
-                break;
-            case WsBridgeStatusMessage bridgeStatusMessage:
-                await OnBridgeStateMessage(clientMetadata, bridgeStatusMessage);
-                break;
-            case WsSubscribeMessage subscribeMessage:
-                await OnSubscribeMessage(clientMetadata, subscribeMessage);
-                break;
-            case WsUnsubscribeMessage unsubscribeMessage:
-                await OnUnsubscribeMessage(clientMetadata, unsubscribeMessage);
-                break;
-        }
-    }
-    
-    private bool TryParseWebsocketMessage(string message, [NotNullWhen(true)] out WsBaseMessage? parsedMessage)
-    {
-        parsedMessage = null;
-
         try
         {
-            var baseMessage = JsonSerializer.Deserialize<WsBaseMessage>(message);
-
-            if (baseMessage == null)
-            {
-                return false;
-            }
+            var parsedMessage = ParseWebsocketMessage(message);
             
-            parsedMessage = baseMessage.Type switch
+            switch (parsedMessage)
             {
-                "connect" => JsonSerializer.Deserialize<WsConnectMessage>(message),
-                "start" => JsonSerializer.Deserialize<WsStartMessage>(message),
-                "stop" => JsonSerializer.Deserialize<WsStopMessage>(message),
-                "calibrate" => JsonSerializer.Deserialize<WsCalibrateMessage>(message),
-                "disconnect" => JsonSerializer.Deserialize<WsDisconnectMessage>(message),
-                "status" => JsonSerializer.Deserialize<WsBridgeStatusMessage>(message),
-                "subscribe" => JsonSerializer.Deserialize<WsSubscribeMessage>(message),
-                "unsubscribe" => JsonSerializer.Deserialize<WsUnsubscribeMessage>(message),
-                _ => null,
-            };
-
-            return parsedMessage != null;
+                case WsConnectMessage connectMessage:
+                    await OnConnectMessage(clientMetadata, connectMessage);
+                    break;
+                case WsStartMessage startMessage:
+                    await OnStartMessage(clientMetadata, startMessage);
+                    break;
+                case WsStopMessage stopMessage:
+                    await OnStopMessage(clientMetadata, stopMessage);
+                    break;
+                case WsCalibrateMessage calibrateMessage:
+                    await OnCalibrateMessage(clientMetadata, calibrateMessage);
+                    break;
+                case WsDisconnectMessage disconnectMessage:
+                    await OnDisconnectMessage(clientMetadata, disconnectMessage);
+                    break;
+                case WsBridgeStatusMessage bridgeStatusMessage:
+                    await OnBridgeStateMessage(clientMetadata, bridgeStatusMessage);
+                    break;
+                case WsSubscribeMessage subscribeMessage:
+                    await OnSubscribeMessage(clientMetadata, subscribeMessage);
+                    break;
+                case WsUnsubscribeMessage unsubscribeMessage:
+                    await OnUnsubscribeMessage(clientMetadata, unsubscribeMessage);
+                    break;
+                case WsBridgeMessage bridgeMessage:
+                    await OnBridgeMessage(clientMetadata, bridgeMessage);
+                    break;
+            }
         }
         catch (Exception ex)
         {
-            return false;
+            ConsoleOutput.WsUnableToParseMessage(ex.Message);
         }
+    }
+    
+    private WsBaseMessage ParseWebsocketMessage(string message)
+    {
+        var baseMessage = JsonSerializer.Deserialize<WsBaseMessage>(message);
+
+        if (baseMessage == null)
+        {
+            throw new ArgumentNullException("type or identifiers are invalid or missing");
+        }
+        
+        WsBaseMessage? parsedMessage = baseMessage.Type switch
+        {
+            "connect" => JsonSerializer.Deserialize<WsConnectMessage>(message),
+            "start" => JsonSerializer.Deserialize<WsStartMessage>(message),
+            "stop" => JsonSerializer.Deserialize<WsStopMessage>(message),
+            "calibrate" => JsonSerializer.Deserialize<WsCalibrateMessage>(message),
+            "disconnect" => JsonSerializer.Deserialize<WsDisconnectMessage>(message),
+            "status" => JsonSerializer.Deserialize<WsBridgeStatusMessage>(message),
+            "subscribe" => JsonSerializer.Deserialize<WsSubscribeMessage>(message),
+            "unsubscribe" => JsonSerializer.Deserialize<WsUnsubscribeMessage>(message),
+            "message" => JsonSerializer.Deserialize<WsBridgeMessage>(message),
+            _ => null,
+        };
+
+        if (parsedMessage == null)
+        {
+            throw new UnknownType($"unknown type \"{baseMessage.Type}\"");
+        }
+
+        return parsedMessage;
     }
     
     private Task SendToAll<T>(T responseMessage)
