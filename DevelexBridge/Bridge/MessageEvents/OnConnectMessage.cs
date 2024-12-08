@@ -1,7 +1,5 @@
-﻿using System.Net.WebSockets;
-using System.Text.Json;
-using Bridge.Enums;
-using Bridge.EyeTrackers.OpenGaze;
+﻿using Bridge.Enums;
+using Bridge.EyeTrackers.GazePoint;
 using Bridge.Models;
 
 namespace Bridge;
@@ -27,9 +25,9 @@ public partial class BridgeWindow
         
         switch (message.Config.TrackerType)
         {
-            case "opengaze":
-                var og = new OpenGaze(SendToAll);
-                EyeTracker = og;
+            case "gazepoint":
+                var gp = new GazePoint(SendToAll);
+                EyeTracker = gp;
                 break;
         }
 

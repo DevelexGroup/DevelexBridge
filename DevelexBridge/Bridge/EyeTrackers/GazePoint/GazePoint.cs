@@ -7,9 +7,9 @@ using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
 using Bridge.Models;
 
-namespace Bridge.EyeTrackers.OpenGaze;
+namespace Bridge.EyeTrackers.GazePoint;
 
-public class OpenGaze(Func<object, Task> wsResponse) : EyeTracker
+public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
     public override Func<object, Task> WsResponse { get; init; } = wsResponse;
