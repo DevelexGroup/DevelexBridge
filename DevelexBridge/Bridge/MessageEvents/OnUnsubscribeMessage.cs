@@ -1,4 +1,5 @@
 using Bridge.Models;
+using Bridge.Output;
 
 namespace Bridge;
 
@@ -8,12 +9,7 @@ public partial class BridgeWindow
     {
         if (Server == null)
         {
-            return;
-        }
-        
-        if (EyeTracker == null)
-        {
-            await WsErrorDeviceNotConnected();
+            ConsoleOutput.WsServerIsNotRunning();
             return;
         }
 

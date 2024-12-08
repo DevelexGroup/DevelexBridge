@@ -105,6 +105,7 @@ public partial class BridgeWindow : Form
         catch (Exception ex)
         {
             ConsoleOutput.WsUnableToParseMessage(ex.Message);
+            await SendToAll(new WsOutgoingErrorMessage(ex.Message));
         }
     }
     

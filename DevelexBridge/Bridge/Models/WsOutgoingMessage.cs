@@ -19,16 +19,16 @@ public abstract class WsOutgoingMessageWithIdentifiers(string type, WsMessageIde
     public string InitiatorId { get; init; } = identifiers.InitiatorId;
 }
 
-public class WsOutgoingResponseMessage(string responseTo, EyeTracker eyeTracker, WsMessageIdentifiers identifiers) : WsOutgoingMessageWithIdentifiers("response", identifiers)
+public class WsOutgoingResponseMessage(string responseTo, EyeTracker? eyeTracker, WsMessageIdentifiers identifiers) : WsOutgoingMessageWithIdentifiers("response", identifiers)
 { 
     [JsonPropertyName("responseTo")] 
     public string ResponseTo { get; set; } = responseTo; 
     
     [JsonPropertyName("status")] 
-    public string Status { get; set; } = eyeTracker.State.GetDisplayName() ?? "trackerDisconnected";
+    public string Status { get; set; } = eyeTracker?.State.GetDisplayName() ?? "trackerDisconnected";
     
     [JsonPropertyName("trackerCalibration")] 
-    public DateTime? TrackerCalibration { get; set; } = eyeTracker.LastCalibration;
+    public DateTime? TrackerCalibration { get; set; } = eyeTracker?.LastCalibration;
 }
 
 public class WsOutgoingErrorMessage(string content) : WsOutgoingMessage("error")

@@ -59,4 +59,9 @@ public static class ConsoleOutput
     {
         Console.WriteLine($"[WS] Sending message to {clients} clients: {message}");
     }
+
+    public static void WsServerIsNotRunning()
+    {
+        Console.WriteLine($"[WS] Websocket server {{Red}}is not{{Default}} running.");
+    }
 }
