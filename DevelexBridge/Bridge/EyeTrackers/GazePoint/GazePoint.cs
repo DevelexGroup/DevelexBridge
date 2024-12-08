@@ -85,7 +85,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             _threadCancel.Dispose();
         }
 
-        State = EyeTrackerState.Stopped;
+        State = EyeTrackerState.Connected;
 
         return true;
     }
@@ -158,7 +158,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
         await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\r\n");
         await _dataWriter.FlushAsync();
 
-        State = EyeTrackerState.Stopped;
+        State = EyeTrackerState.Connected;
 
         return successfullySent;
     }

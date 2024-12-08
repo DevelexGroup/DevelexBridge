@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Bridge.Enums;
+using Bridge.Extensions;
 
 namespace Bridge.Models;
 
@@ -24,7 +25,7 @@ public class WsOutgoingResponseMessage(string responseTo, EyeTracker eyeTracker,
     public string ResponseTo { get; set; } = responseTo; 
     
     [JsonPropertyName("status")] 
-    public EyeTrackerState Status { get; set; } = eyeTracker.State; 
+    public string Status { get; set; } = eyeTracker.State.GetDisplayName() ?? "trackerDisconnected";
     
     [JsonPropertyName("trackerCalibration")] 
     public DateTime? TrackerCalibration { get; set; } = eyeTracker.LastCalibration;
