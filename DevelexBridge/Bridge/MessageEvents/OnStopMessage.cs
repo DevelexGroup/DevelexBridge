@@ -8,21 +8,23 @@ public partial class BridgeWindow
 {
     private async Task OnStopMessage(WsClientMetadata clientMetadata, WsIncomingStopMessage message)
     {
+        var responseTo = "stop";
+        
         if (EyeTracker == null || EyeTracker.State == EyeTrackerState.Disconnected)
         {
-            await WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected(responseTo, message.Identifiers);
             return;
         }
 
         if (EyeTracker.State == EyeTrackerState.Connecting)
         {
-            await WsErrorDeviceConnecting();
+            await WsErrorDeviceConnecting(responseTo, message.Identifiers);
             return;
         }
 
         if (EyeTracker.State != EyeTrackerState.Started)
         {
-            // not started
+            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "device not started"));
             return;
         }
         
@@ -32,12 +34,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsOutgoingResponseMessage("stop", EyeTracker, message.Identifiers));
+                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsOutgoingErrorMessage(ex.Message));
+            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
         }
     }
 }

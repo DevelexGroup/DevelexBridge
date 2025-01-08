@@ -1,3 +1,4 @@
+using Bridge.Enums;
 using Bridge.Models;
 using Bridge.Output;
 
@@ -14,6 +15,6 @@ public partial class BridgeWindow
         }
 
         Server.DisconnectClient(clientMetadata.Id);
-        await SendToAll(new WsOutgoingResponseMessage("unsubscribe", EyeTracker, message.Identifiers));
+        await SendToAll(new WsOutgoingResponseMessage("unsubscribe", EyeTracker, message.Identifiers, ResponseStatus.Resolved));
     }
 }

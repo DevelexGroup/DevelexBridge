@@ -8,20 +8,25 @@ public partial class BridgeWindow
 {
     private async Task OnConnectMessage(WsClientMetadata clientMetadata, WsIncomingConnectMessage message)
     {
+        var responseTo = "connect";
+        
         if (EyeTracker != null)
         {
             if (EyeTracker.State == EyeTrackerState.Connecting)
             {
-                await WsErrorDeviceConnecting();
+                await WsErrorDeviceConnecting(responseTo, message.Identifiers);
                 return;
             }
             
             if (EyeTracker.State == EyeTrackerState.Connected)
             {
-                await SendToAll(new WsOutgoingErrorMessage("device already connected"));
+                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers,
+                    ResponseStatus.Rejected, "device already connected"));
                 return;
             }
         }
+        
+        await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
         
         switch (message.Config.TrackerType)
         {
@@ -39,12 +44,12 @@ public partial class BridgeWindow
 
                 if (result)
                 {
-                    await SendToAll(new WsOutgoingResponseMessage("connect", EyeTracker, message.Identifiers));
+                    await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
                 }
             }
             catch (Exception ex)
             {
-                await SendToAll(new WsOutgoingErrorMessage(ex.Message));
+                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
             }
         }
     }

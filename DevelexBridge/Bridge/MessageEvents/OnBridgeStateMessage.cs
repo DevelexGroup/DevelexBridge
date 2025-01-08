@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using Bridge.Enums;
 using Bridge.Models;
 
 namespace Bridge;
@@ -9,10 +10,10 @@ public partial class BridgeWindow
     {
         if (EyeTracker == null)
         {
-            await WsErrorDeviceNotConnected();
+            await WsErrorDeviceNotConnected("status", message.Identifiers);
             return;
         }
 
-        await SendToAll(new WsOutgoingResponseMessage("status", EyeTracker, message.Identifiers));
+        await SendToAll(new WsOutgoingResponseMessage("status", EyeTracker, message.Identifiers, ResponseStatus.Resolved));
     }
 }
