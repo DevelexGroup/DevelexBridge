@@ -5,7 +5,7 @@ namespace Bridge.Output;
 
 internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
 {
-    private readonly Dictionary<string, Color> _colorMap = new()
+    private static readonly Dictionary<string, Color> ColorMap = new()
     {
         { "{Red}", Color.Red },
         { "{Blue}", Color.Blue },
@@ -14,9 +14,15 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
         { "{Default}", Color.Black }
     };
     
-    private static readonly Regex ColorTagRegex = ColorTagReplacementRegex();
-
+    private static readonly Regex ColorTagRegex = GenerateColorTagRegex();
     public override Encoding Encoding => Encoding.UTF8;
+
+    private static Regex GenerateColorTagRegex()
+    {
+        var tags = string.Join("|", ColorMap.Keys);
+        
+        return new Regex(@"(" + tags + @")+", RegexOptions.Compiled);
+    }
 
     public override void Write(string? value)
     {
@@ -43,7 +49,7 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
         {
             var matches = ColorTagRegex.Matches(value);
             var lastIndex = 0;
-            var currentColor = _colorMap["{Default}"];
+            var currentColor = ColorMap["{Default}"];
 
             foreach (Match match in matches)
             {
@@ -52,7 +58,7 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
                     AppendColoredText(value.Substring(lastIndex, match.Index - lastIndex), currentColor);
                 }
 
-                if (_colorMap.TryGetValue(match.Value, out var newColor))
+                if (ColorMap.TryGetValue(match.Value, out var newColor))
                 {
                     currentColor = newColor;
                 }
@@ -82,7 +88,4 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
         richTextBox.SelectionColor = color;
         richTextBox.SelectionLength = 0;
     }
-
-    [GeneratedRegex(@"\{[^{}]+\}", RegexOptions.Compiled)]
-    private static partial Regex ColorTagReplacementRegex();
 }
