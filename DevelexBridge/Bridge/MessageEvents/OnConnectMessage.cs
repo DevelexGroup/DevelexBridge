@@ -1,4 +1,5 @@
 ﻿using Bridge.Enums;
+using Bridge.EyeTrackers.EyeLogic;
 using Bridge.EyeTrackers.GazePoint;
 using Bridge.Models;
 
@@ -31,9 +32,14 @@ public partial class BridgeWindow
         switch (message.Config.TrackerType)
         {
             case "gazepoint":
-                var gp = new GazePoint(SendToAll);
-                EyeTracker = gp;
+                EyeTracker = new GazePoint(SendToAll);
                 break;
+            case "eyelogic":
+                EyeTracker = new EyeLogic(SendToAll);
+                break;
+            default:
+                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "unknown tracker type"));
+                return;
         }
 
         if (EyeTracker != null)

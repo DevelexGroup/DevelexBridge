@@ -8,5 +8,21 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <PublishSingleFile>true</PublishSingleFile>
     </PropertyGroup>
+    <ItemGroup>
+      <Folder Include="EyeTrackers\EyeLogic\Libs\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="ELCsApi">
+        <HintPath>EyeTrackers\EyeLogic\Libs\ELCsApi.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <Target Name="CopyAllFiles" AfterTargets="Build">
+        <ItemGroup>
+            <FilesToCopy Include="EyeTrackers\EyeLogic\Libs\**\*.*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutputPath)" />
+    </Target>
 
 </Project>
