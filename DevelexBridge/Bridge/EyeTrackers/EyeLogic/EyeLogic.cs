@@ -142,6 +142,21 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
     private void OnEyeLogicGazeSample(GazeSample gazeSample)
     {
-        Console.WriteLine($"EL gaze sample ${gazeSample.porLeft} - ${gazeSample.porRight}");
+        // Console.WriteLine($"EL gaze sample ${gazeSample.porLeft} - ${gazeSample.porRight}");
+        
+        var outputData = new WsOutgoingGazeMessage
+        {
+            LeftX = gazeSample.porLeft.x,
+            LeftY = gazeSample.porLeft.y,
+            RightX = gazeSample.porRight.x,
+            RightY = gazeSample.porRight.y,
+            LeftValidity = true,
+            RightValidity = true,
+            LeftPupil = gazeSample.pupilRadiusLeft,
+            RightPupil = gazeSample.pupilRadiusRight,
+            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+        };
+        
+        WsResponse(outputData);
     }
 }
