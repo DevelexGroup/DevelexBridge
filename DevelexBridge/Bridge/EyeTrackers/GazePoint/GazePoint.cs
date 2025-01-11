@@ -251,7 +251,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             RightValidity = data.Get("RPOGV", "0") == "1",
             LeftPupil = data.Get("LPD", "0").ParseDouble(),
             RightPupil = data.Get("RPD", "0").ParseDouble(),
-            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+            Timestamp = DateTimeExtensions.IsoNow
         };
 
         if (data.Get("FPOGV", "0") == "1")

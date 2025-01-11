@@ -44,7 +44,7 @@ public class WsOutgoingErrorMessage(string content) : WsOutgoingMessage("error")
     public string Content { get; set; } = content;
     
     [JsonPropertyName("timestamp")]
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public string Timestamp { get; set; } = DateTimeExtensions.IsoNow;
 }
 
 public class WsOutgoingTunnelMessage(string content, WsMessageIdentifiers identifiers) : WsOutgoingMessageWithIdentifiers("message", identifiers)
@@ -53,22 +53,22 @@ public class WsOutgoingTunnelMessage(string content, WsMessageIdentifiers identi
     public string Content { get; set; } = content;
     
     [JsonPropertyName("timestamp")]
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public string Timestamp { get; set; } = DateTimeExtensions.IsoNow;
 }
 
 public class WsOutgoingGazeMessage() : WsOutgoingMessage("gaze")
 {
     [JsonPropertyName("xL")]
-    public double LeftX { get; set; }
+    public required double LeftX { get; set; }
     
     [JsonPropertyName("yL")]
-    public double LeftY { get; set; }
+    public required double LeftY { get; set; }
     
     [JsonPropertyName("xR")]
-    public double RightX { get; set; }
+    public required double RightX { get; set; }
     
     [JsonPropertyName("yR")]
-    public double RightY { get; set; }
+    public required double RightY { get; set; }
     
     [JsonPropertyName("validityL")]
     public bool LeftValidity { get; set; }
@@ -77,7 +77,7 @@ public class WsOutgoingGazeMessage() : WsOutgoingMessage("gaze")
     public bool RightValidity { get; set; }
     
     [JsonPropertyName("timestamp")]
-    public long Timestamp { get; set; }
+    public required string Timestamp { get; set; }
     
     [JsonPropertyName("fixationId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

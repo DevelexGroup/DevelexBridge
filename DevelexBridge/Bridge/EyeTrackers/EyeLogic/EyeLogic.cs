@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
+using Bridge.Extensions;
 using Bridge.Models;
 using eyelogic;
 
@@ -154,7 +155,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
             RightValidity = true,
             LeftPupil = gazeSample.pupilRadiusLeft,
             RightPupil = gazeSample.pupilRadiusRight,
-            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+            Timestamp = DateTimeExtensions.IsoNow,
         };
         
         WsResponse(outputData);
