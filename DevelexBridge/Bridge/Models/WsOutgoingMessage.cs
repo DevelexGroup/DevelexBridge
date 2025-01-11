@@ -21,21 +21,33 @@ public abstract class WsOutgoingMessageWithIdentifiers(string type, WsMessageIde
 
 public class WsOutgoingResponseMessage(string responseTo, EyeTracker? eyeTracker, WsMessageIdentifiers identifiers, ResponseStatus responseStatus, string responseMessage = "") 
     : WsOutgoingMessageWithIdentifiers("response", identifiers)
-{ 
-    [JsonPropertyName("responseTo")] 
-    public string ResponseTo { get; set; } = responseTo; 
+{
+    [JsonPropertyName("tracker")]
+    public TrackerInfo Tracker { get; set; } = new(eyeTracker);
     
-    [JsonPropertyName("trackerStatus")] 
-    public string TrackerStatus { get; set; } = eyeTracker?.State.GetDisplayName() ?? "trackerDisconnected";
-    
-    [JsonPropertyName("trackerCalibration")] 
-    public DateTime? TrackerCalibration { get; set; } = eyeTracker?.LastCalibration;
+    [JsonPropertyName("response")]
+    public ResponseInfo Response { get; set; } = new (responseTo, responseStatus, responseMessage);
 
-    [JsonPropertyName("responseStatus")]
-    public string ResponseStatus { get; set; } = responseStatus.GetDisplayName() ?? "rejected";
+    public class ResponseInfo(string responseTo, ResponseStatus responseStatus, string responseMessage = "")
+    {
+        [JsonPropertyName("to")]
+        public string To { get; set; } = responseTo;
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = responseStatus.GetDisplayName() ?? "rejected";
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; } = responseMessage;
+    }
+
+    public class TrackerInfo(EyeTracker? eyeTracker)
+    {
+        [JsonPropertyName("status")] 
+        public string Status { get; set; } = eyeTracker?.State.GetDisplayName() ?? "trackerDisconnected";
     
-    [JsonPropertyName("responseMessage")]
-    public string ResponseMessage { get; set; } = responseMessage;
+        [JsonPropertyName("calibration")] 
+        public DateTime? Calibration { get; set; } = eyeTracker?.LastCalibration;
+    }
 }
 
 public class WsOutgoingErrorMessage(string content) : WsOutgoingMessage("error")
