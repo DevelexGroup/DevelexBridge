@@ -7,7 +7,10 @@
         <UseWindowsForms>true</UseWindowsForms>
         <ImplicitUsings>enable</ImplicitUsings>
         <PublishSingleFile>true</PublishSingleFile>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+        <PublishTrimmed>false</PublishTrimmed>
     </PropertyGroup>
+    
     <ItemGroup>
       <Folder Include="EyeTrackers\EyeLogic\Libs\" />
     </ItemGroup>
@@ -18,11 +21,12 @@
       </Reference>
     </ItemGroup>
 
-    <Target Name="CopyAllFiles" AfterTargets="Build">
-        <ItemGroup>
-            <FilesToCopy Include="EyeTrackers\EyeLogic\Libs\**\*.*" />
-        </ItemGroup>
-        <Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(OutputPath)" />
-    </Target>
-
+    <ItemGroup>
+      <EmbeddedResource Include="EyeTrackers\EyeLogic\Libs\ELApi.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\EyeLogic\Libs\ELCApi.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+    </ItemGroup>
 </Project>
