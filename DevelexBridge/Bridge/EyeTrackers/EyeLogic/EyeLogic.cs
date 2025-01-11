@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
@@ -12,8 +13,9 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
     public override Func<object, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration  { get; set; } = null;
-
     private ELCsApi? Api { get; set; } = null;
+    private ConcurrentQueue<GazeSample> _gazeSamples = new();
+    private bool _processingQueue = false;
 
     public override async Task<bool> Connect()
     {
@@ -103,10 +105,20 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
         State = EyeTrackerState.Calibrating;
         
-        Api.calibrate(0);
+        Api.requestTracking(0);
+        
+        try
+        {
+            Api.calibrate(0);
+        }
+        finally
+        {
+            Api.unrequestTracking();
+            State = EyeTrackerState.Connected;
+        }
 
-        State = EyeTrackerState.Connected;
-
+        LastCalibration = DateTime.UtcNow;
+        
         await Task.Delay(1);
 
         return true;
@@ -143,21 +155,36 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
     private void OnEyeLogicGazeSample(GazeSample gazeSample)
     {
-        // Console.WriteLine($"EL gaze sample ${gazeSample.porLeft} - ${gazeSample.porRight}");
-        
-        var outputData = new WsOutgoingGazeMessage
+        _gazeSamples.Enqueue(gazeSample);
+
+        if (!_processingQueue)
         {
-            LeftX = gazeSample.porLeft.x,
-            LeftY = gazeSample.porLeft.y,
-            RightX = gazeSample.porRight.x,
-            RightY = gazeSample.porRight.y,
-            LeftValidity = true,
-            RightValidity = true,
-            LeftPupil = gazeSample.pupilRadiusLeft,
-            RightPupil = gazeSample.pupilRadiusRight,
-            Timestamp = DateTimeExtensions.IsoNow,
-        };
-        
-        WsResponse(outputData);
+            _ = ProcessGazeSampleQueue();
+        }
+    }
+
+    private async Task ProcessGazeSampleQueue()
+    {
+        _processingQueue = true;
+
+        while (_gazeSamples.TryDequeue(out var gazeSample))
+        {
+            var outputData = new WsOutgoingGazeMessage
+            {
+                LeftX = gazeSample.porLeft.x,
+                LeftY = gazeSample.porLeft.y,
+                RightX = gazeSample.porRight.x,
+                RightY = gazeSample.porRight.y,
+                LeftValidity = true,
+                RightValidity = true,
+                LeftPupil = gazeSample.pupilRadiusLeft,
+                RightPupil = gazeSample.pupilRadiusRight,
+                Timestamp = DateTimeExtensions.IsoNow,
+            };
+
+            await WsResponse(outputData);
+        }
+
+        _processingQueue = false;
     }
 }
