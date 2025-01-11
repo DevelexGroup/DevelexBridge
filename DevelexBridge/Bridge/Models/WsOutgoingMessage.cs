@@ -46,7 +46,7 @@ public class WsOutgoingResponseMessage(string responseTo, EyeTracker? eyeTracker
         public string Status { get; set; } = eyeTracker?.State.GetDisplayName() ?? "trackerDisconnected";
     
         [JsonPropertyName("calibration")] 
-        public DateTime? Calibration { get; set; } = eyeTracker?.LastCalibration;
+        public string? Calibration { get; set; } = eyeTracker?.LastCalibration?.ToIso();
     }
 }
 
