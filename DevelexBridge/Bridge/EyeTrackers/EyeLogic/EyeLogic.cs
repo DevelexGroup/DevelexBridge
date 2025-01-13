@@ -16,6 +16,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
     private ELCsApi? Api { get; set; } = null;
     private ConcurrentQueue<GazeSample> _gazeSamples = new();
     private bool _processingQueue = false;
+    private ELCsApi.ScreenConfig? _screenConfig = null;
 
     public override async Task<bool> Connect()
     {
@@ -37,9 +38,9 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 throw new EyeTrackerUnableToConnect("eyelogic config not found - device not connected");
             }
 
-            var screenConfig = Api.getActiveScreen();
+            _screenConfig = Api.getActiveScreen();
 
-            if (screenConfig == null)
+            if (_screenConfig == null)
             {
                 throw new EyeTrackerUnableToConnect("eyelogic screen config not found - device not connected");
             }
@@ -134,6 +135,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         Api.disconnect();
         Api.destroy();
         Api = null;
+        _screenConfig = null;
 
         State = EyeTrackerState.Disconnected;
 
@@ -159,11 +161,18 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
         if (!_processingQueue)
         {
-            _ = ProcessGazeSampleQueue();
+            if (_screenConfig == null)
+            {
+                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
+                
+                return;
+            }
+            
+            _ = ProcessGazeSampleQueue(_screenConfig.resolutionX, _screenConfig.resolutionY);
         }
     }
 
-    private async Task ProcessGazeSampleQueue()
+    private async Task ProcessGazeSampleQueue(int resX, int resY)
     {
         _processingQueue = true;
 
@@ -171,12 +180,12 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         {
             var outputData = new WsOutgoingGazeMessage
             {
-                LeftX = gazeSample.porLeft.x,
-                LeftY = gazeSample.porLeft.y,
-                RightX = gazeSample.porRight.x,
-                RightY = gazeSample.porRight.y,
-                LeftValidity = true,
-                RightValidity = true,
+                LeftX = gazeSample.porLeft.x / resX,
+                LeftY = gazeSample.porLeft.y / resY,
+                RightX = gazeSample.porRight.x / resX,
+                RightY = gazeSample.porRight.y / resY,
+                LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
+                RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
                 LeftPupil = gazeSample.pupilRadiusLeft,
                 RightPupil = gazeSample.pupilRadiusRight,
                 Timestamp = DateTimeExtensions.IsoNow,
