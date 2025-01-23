@@ -10,23 +10,40 @@
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
         <PublishTrimmed>false</PublishTrimmed>
     </PropertyGroup>
-    
+
     <ItemGroup>
-      <Folder Include="EyeTrackers\EyeLogic\Libs\" />
+      <EmbeddedResource Include="EyeTrackers\Libs\ELApi.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\ELCApi.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\aSeeX.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\aSeeX.lib">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\USERSDK.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+<!--      <EmbeddedResource Include="EyeTrackers\Libs\opencv_world320.dll">-->
+<!--        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>-->
+<!--      </EmbeddedResource>-->
+      <EmbeddedResource Include="EyeTrackers\Libs\nlopt.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\GazeAfterProcess.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <EmbeddedResource Include="EyeTrackers\Libs\FdDetect.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
     </ItemGroup>
 
     <ItemGroup>
       <Reference Include="ELCsApi">
-        <HintPath>EyeTrackers\EyeLogic\Libs\ELCsApi.dll</HintPath>
+        <HintPath>EyeTrackers\Libs\ELCsApi.dll</HintPath>
       </Reference>
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Include="EyeTrackers\EyeLogic\Libs\ELApi.dll">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </EmbeddedResource>
-      <EmbeddedResource Include="EyeTrackers\EyeLogic\Libs\ELCApi.dll">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </EmbeddedResource>
     </ItemGroup>
 </Project>

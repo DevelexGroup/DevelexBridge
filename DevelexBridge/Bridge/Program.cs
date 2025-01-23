@@ -13,8 +13,7 @@ static class Program
     [STAThread]
     static void Main()
     {
-        // TODO: for future eyetrackers do some kind of merging dll
-        var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EyeTrackers", "EyeLogic", "Libs");
+        var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EyeTrackers", "Libs");
         SetDllDirectory(dllPath);
         
         ApplicationConfiguration.Initialize();

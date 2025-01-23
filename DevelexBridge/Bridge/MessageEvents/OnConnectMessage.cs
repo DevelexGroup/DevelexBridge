@@ -1,4 +1,5 @@
 ﻿using Bridge.Enums;
+using Bridge.EyeTrackers.aSee;
 using Bridge.EyeTrackers.EyeLogic;
 using Bridge.EyeTrackers.GazePoint;
 using Bridge.Models;
@@ -36,6 +37,9 @@ public partial class BridgeWindow
                 break;
             case "eyelogic":
                 EyeTracker = new EyeLogic(SendToAll);
+                break;
+            case "asee":
+                EyeTracker = new ASee(SendToAll);
                 break;
             default:
                 await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "unknown tracker type"));
