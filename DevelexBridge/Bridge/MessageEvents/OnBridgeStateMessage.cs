@@ -10,7 +10,7 @@ public partial class BridgeWindow
     {
         if (EyeTracker == null)
         {
-            await WsErrorDeviceNotConnected("status", message.Identifiers);
+            await WsErrorDeviceNotConnected("status", message.Identifiers, ResponseStatus.Resolved);
             return;
         }
 

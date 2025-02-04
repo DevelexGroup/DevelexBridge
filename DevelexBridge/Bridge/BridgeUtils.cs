@@ -5,9 +5,9 @@ namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private Task WsErrorDeviceNotConnected(string responseTo, WsMessageIdentifiers identifiers)
+    private Task WsErrorDeviceNotConnected(string responseTo, WsMessageIdentifiers identifiers, ResponseStatus status = ResponseStatus.Rejected)
     {
-        return SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, identifiers, ResponseStatus.Rejected, "device is not connected"));
+        return SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, identifiers, status, "device is not connected"));
     }
 
     private Task WsErrorDeviceConnecting(string responseTo, WsMessageIdentifiers identifiers)
