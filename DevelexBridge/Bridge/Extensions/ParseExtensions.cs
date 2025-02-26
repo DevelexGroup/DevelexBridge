@@ -13,4 +13,9 @@ public static class ParseExtensions
     {
         return int.TryParse(input, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
     }
+    
+    public static long ParseLong(this string input)
+    {
+        return long.TryParse(input, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
+    }
 }

@@ -91,6 +91,9 @@ public class WsOutgoingGazeMessage() : WsOutgoingMessage("gaze")
     [JsonPropertyName("timestamp")]
     public required string Timestamp { get; set; }
     
+    [JsonPropertyName("deviceTimestamp")]
+    public required string DeviceTimestamp { get; set; }
+    
     [JsonPropertyName("fixationId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FixationId { get; set; }

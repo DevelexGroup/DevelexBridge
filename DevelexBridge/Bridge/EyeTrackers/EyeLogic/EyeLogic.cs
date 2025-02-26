@@ -189,6 +189,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 LeftPupil = gazeSample.pupilRadiusLeft,
                 RightPupil = gazeSample.pupilRadiusRight,
                 Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
             };
 
             await WsResponse(outputData);

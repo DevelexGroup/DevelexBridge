@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
@@ -251,9 +252,10 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             RightValidity = data.Get("RPOGV", "0") == "1",
             LeftPupil = data.Get("LPD", "0").ParseDouble(),
             RightPupil = data.Get("RPD", "0").ParseDouble(),
-            Timestamp = DateTimeExtensions.IsoNow
+            Timestamp = DateTimeExtensions.IsoNow,
+            DeviceTimestamp = DateTime.UtcNow.AddMilliseconds(-((Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong()) / Stopwatch.Frequency * 1000)).ToIso(),
         };
-
+        
         if (data.Get("FPOGV", "0") == "1")
         {
             outputData.FixationId = data.Get("FPOGID", "0");
@@ -277,6 +279,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
         
         if (_dataWriter != null)
         {
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_TIME_TICK\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\r\n");

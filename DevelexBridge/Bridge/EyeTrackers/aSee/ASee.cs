@@ -147,6 +147,7 @@ public class ASee(Func<object, Task> wsResponse) : EyeTracker
                 LeftPupil = gazeSample.left_pupil.pupil_diameter,
                 RightPupil = gazeSample.right_pupil.pupil_diameter,
                 Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeSeconds((long)gazeSample.timestamp).DateTime.ToIso()
             };
             
             await instance.WsResponse(outputData);
