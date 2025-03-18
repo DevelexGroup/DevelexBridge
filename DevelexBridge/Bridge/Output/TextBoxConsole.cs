@@ -3,8 +3,15 @@ using System.Text.RegularExpressions;
 
 namespace Bridge.Output;
 
-internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
+internal partial class RichTextBoxConsole : TextWriter
 {
+    private readonly RichTextBox _richTextBox;
+
+    public RichTextBoxConsole(RichTextBox richTextBox)
+    {
+        _richTextBox = richTextBox;
+    }
+
     private static readonly Dictionary<string, Color> ColorMap = new()
     {
         { "{Red}", Color.Red },
@@ -13,22 +20,23 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
         { "{Yellow}", Color.Goldenrod },
         { "{Default}", Color.Black }
     };
-    
+
     private static readonly Regex ColorTagRegex = GenerateColorTagRegex();
+
     public override Encoding Encoding => Encoding.UTF8;
 
     private static Regex GenerateColorTagRegex()
     {
         var tags = string.Join("|", ColorMap.Keys);
-        
+
         return new Regex(@"(" + tags + @")+", RegexOptions.Compiled);
     }
 
     public override void Write(string? value)
     {
-        if (richTextBox.InvokeRequired)
+        if (_richTextBox.InvokeRequired)
         {
-            richTextBox.Invoke(new Action<string>(Write), value);
+            _richTextBox.Invoke(new Action<string>(Write), value);
         }
         else
         {
@@ -43,9 +51,9 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
 
     private void ProcessText(string value)
     {
-        richTextBox.SuspendLayout();
-        
-        try 
+        _richTextBox.SuspendLayout();
+
+        try
         {
             var matches = ColorTagRegex.Matches(value);
             var lastIndex = 0;
@@ -71,9 +79,10 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
                 AppendColoredText(value[lastIndex..], currentColor);
             }
         }
-        finally 
+        finally
         {
-            richTextBox.ResumeLayout();
+            _richTextBox.ResumeLayout();
+            ScrollToEnd();
         }
     }
 
@@ -81,11 +90,17 @@ internal partial class RichTextBoxConsole(RichTextBox richTextBox) : TextWriter
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        var start = richTextBox.TextLength;
-        
-        richTextBox.AppendText(text);
-        richTextBox.Select(start, text.Length);
-        richTextBox.SelectionColor = color;
-        richTextBox.SelectionLength = 0;
+        var start = _richTextBox.TextLength;
+
+        _richTextBox.AppendText(text);
+        _richTextBox.Select(start, text.Length);
+        _richTextBox.SelectionColor = color;
+        _richTextBox.SelectionLength = 0;
+    }
+
+    private void ScrollToEnd()
+    {
+        _richTextBox.SelectionStart = _richTextBox.Text.Length;
+        _richTextBox.ScrollToCaret();
     }
 }

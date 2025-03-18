@@ -15,6 +15,8 @@ public class CustomTextBoxContainer : UserControl
 
     public CustomTextBoxContainer()
     {
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         _innerTextBox = new RichTextBox
         {
             BorderStyle = BorderStyle.None,
@@ -22,22 +24,25 @@ public class CustomTextBoxContainer : UserControl
             ForeColor = Color.FromArgb(31, 41, 55),
             Font = new Font("Segoe UI", 10F),
             Location = new Point(8, 5),
-            Multiline = false
+            Multiline = true,
+            ScrollBars = RichTextBoxScrollBars.Vertical,
+            WordWrap = true
         };
 
         Controls.Add(_innerTextBox);
         Padding = new Padding(8, 5, 8, 5);
         BackColor = Color.White;
-        Size = new Size(200, 30);
+        Size = new Size(200, 100);
+        SetStyle(ControlStyles.ResizeRedraw, true);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
 
-        var borderRect = new Rectangle(0, 0, Width - 1, Height - 1);
+        var borderRect = new Rectangle(BorderSize / 2, BorderSize / 2, Width - BorderSize, Height - BorderSize);
         using var pen = new Pen(BorderColor, BorderSize);
-        
+
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
         if (CornerRadius > 0)
@@ -59,19 +64,19 @@ public class CustomTextBoxContainer : UserControl
 
     private void AdjustInnerTextBoxSize()
     {
-        _innerTextBox.Size = new Size(Width - Padding.Left - Padding.Right, Height - Padding.Top - Padding.Bottom);
+        _innerTextBox.Size = new Size(Width - Padding.Horizontal, Height - Padding.Vertical);
     }
 
     private System.Drawing.Drawing2D.GraphicsPath CreateRoundedRectangle(Rectangle bounds, int radius)
     {
         var path = new System.Drawing.Drawing2D.GraphicsPath();
-        
+
         path.AddArc(bounds.X, bounds.Y, radius, radius, 180, 90);
         path.AddArc(bounds.Right - radius, bounds.Y, radius, radius, 270, 90);
         path.AddArc(bounds.Right - radius, bounds.Bottom - radius, radius, radius, 0, 90);
         path.AddArc(bounds.X, bounds.Bottom - radius, radius, radius, 90, 90);
         path.CloseFigure();
-        
+
         return path;
     }
 }
