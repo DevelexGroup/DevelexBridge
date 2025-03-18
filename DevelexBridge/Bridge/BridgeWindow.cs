@@ -47,6 +47,12 @@ public partial class BridgeWindow : Form
         }
         else
         {
+            if (EyeTracker != null)
+            {
+                EyeTracker.Stop();
+                EyeTracker.Disconnect();
+            }
+            
             Task.Run(() =>
             {
                 Server.Stop();
