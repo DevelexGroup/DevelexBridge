@@ -18,6 +18,7 @@ public class ASee(Func<object, Task> wsResponse) : EyeTracker
     private static ConcurrentQueue<_7i_eye_data_ex_t> _gazeSamples = new();
     private static bool _processingQueue = false;
     private GCHandle _contextHandle;
+    private static int _sampleCount = 1;
     
     public override async Task<bool> Connect()
     {
@@ -138,6 +139,7 @@ public class ASee(Func<object, Task> wsResponse) : EyeTracker
         {
             var outputData = new WsOutgoingGazeMessage
             {
+                DeviceId = _sampleCount++,
                 LeftX = gazeSample.left_gaze.gaze_point.x,
                 LeftY = gazeSample.left_gaze.gaze_point.y,
                 RightX = gazeSample.right_gaze.gaze_point.x,

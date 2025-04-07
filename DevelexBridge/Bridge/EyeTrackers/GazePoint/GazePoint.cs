@@ -236,14 +236,29 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             
             var parsedData = ParseData(keyValueData);
             
-            WsResponse(parsedData);
+            WsResponse(parsedData.Gaze);
+
+            if (parsedData.FixationStart != null)
+            {
+                WsResponse(parsedData.FixationStart);
+            }
+
+            if (parsedData.FixationEnd != null)
+            {
+                WsResponse(parsedData.FixationEnd);
+            }
         }
     }
 
-    private WsOutgoingGazeMessage ParseData(Dictionary<string, string> data)
+    private (WsOutgoingGazeMessage Gaze, WsOutgoingFixationStartMessage? FixationStart, WsOutgoingFixationEndMessage? FixationEnd) ParseData(Dictionary<string, string> data)
     {
+        var deviceTimestamp = DateTime.UtcNow
+            .AddMilliseconds(-((Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong()) /
+                Stopwatch.Frequency * 1000));
+        
         var outputData = new WsOutgoingGazeMessage
         {
+            DeviceId = data.Get("CNT", "-1").ParseInt(),
             LeftX = data.Get("LPOGX", "0").ParseDouble(),
             LeftY = data.Get("LPOGY", "0").ParseDouble(),
             RightX = data.Get("RPOGX", "0").ParseDouble(),
@@ -253,16 +268,44 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             LeftPupil = data.Get("LPD", "0").ParseDouble(),
             RightPupil = data.Get("RPD", "0").ParseDouble(),
             Timestamp = DateTimeExtensions.IsoNow,
-            DeviceTimestamp = DateTime.UtcNow.AddMilliseconds(-((Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong()) / Stopwatch.Frequency * 1000)).ToIso(),
+            DeviceTimestamp = deviceTimestamp.ToIso()
         };
+
+        WsOutgoingFixationStartMessage? fixationStart = null;
+        WsOutgoingFixationEndMessage? fixationEnd = null;
         
         if (data.Get("FPOGV", "0") == "1")
         {
-            outputData.FixationId = data.Get("FPOGID", "0");
-            outputData.FixationDuration = data.Get("FPOGD", "0").ParseInt();
+            var fixationId = data.Get("FPOGID", "0").ParseInt();
+            var gazeDeviceId = data.Get("CNT", "-1").ParseInt();
+            var x = data.Get("FPOGX", "0").ParseDouble();
+            var y = data.Get("FPOGY", "0").ParseDouble();
+            var seconds = data.Get("FPOGD", "0").ParseDouble();
+            
+            fixationStart = new WsOutgoingFixationStartMessage()
+            {
+                FixationId = fixationId,
+                GazeDeviceId = gazeDeviceId,
+                X = x,
+                Y = y,
+                Duration = 0,
+                Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = deviceTimestamp.AddSeconds(-seconds).ToIso()
+            };
+            
+            fixationEnd = new WsOutgoingFixationEndMessage()
+            {
+                FixationId = fixationId,
+                GazeDeviceId = gazeDeviceId,
+                X = x,
+                Y = y,
+                Duration = data.Get("FPOGD", "0").ParseDouble(),
+                Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = deviceTimestamp.ToIso()
+            };
         }
 
-        return outputData;
+        return (outputData, fixationStart, fixationEnd);
     }
     
     [MemberNotNullWhen(true, nameof(_tpcClient))]
@@ -280,6 +323,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
         if (_dataWriter != null)
         {
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_TIME_TICK\" STATE=\"{stateValue}\" />\r\n");
+            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_COUNTER\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\r\n");
             await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\r\n");

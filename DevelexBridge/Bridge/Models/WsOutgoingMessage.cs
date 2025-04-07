@@ -70,6 +70,9 @@ public class WsOutgoingTunnelMessage(string content, WsMessageIdentifiers identi
 
 public class WsOutgoingGazeMessage() : WsOutgoingMessage("gaze")
 {
+    [JsonPropertyName("deviceId")]
+    public required int DeviceId { get; set; }
+    
     [JsonPropertyName("xL")]
     public required double LeftX { get; set; }
     
@@ -94,17 +97,57 @@ public class WsOutgoingGazeMessage() : WsOutgoingMessage("gaze")
     [JsonPropertyName("deviceTimestamp")]
     public required string DeviceTimestamp { get; set; }
     
-    [JsonPropertyName("fixationId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? FixationId { get; set; }
-    
-    [JsonPropertyName("fixationDuration")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public float? FixationDuration { get; set; }
-    
     [JsonPropertyName("pupilDiameterL")]
     public double LeftPupil { get; set; }
     
     [JsonPropertyName("pupilDiameterR")]
     public double RightPupil { get; set; }
+}
+
+public class WsOutgoingFixationStartMessage() : WsOutgoingMessage("fixationStart")
+{
+    [JsonPropertyName("fixationId")]
+    public required int FixationId { get; set; }
+    
+    [JsonPropertyName("gazeDeviceId")]
+    public required int GazeDeviceId { get; set; }
+    
+    [JsonPropertyName("x")]
+    public required double X { get; set; }
+    
+    [JsonPropertyName("y")]
+    public required double Y { get; set; }
+    
+    [JsonPropertyName("duration")]
+    public required double Duration { get; set; }
+    
+    [JsonPropertyName("timestamp")]
+    public required string Timestamp { get; set; }
+    
+    [JsonPropertyName("deviceTimestamp")]
+    public required string DeviceTimestamp { get; set; }
+}
+
+public class WsOutgoingFixationEndMessage() : WsOutgoingMessage("fixationEnd")
+{
+    [JsonPropertyName("fixationId")]
+    public required int FixationId { get; set; }
+    
+    [JsonPropertyName("gazeDeviceId")]
+    public required int GazeDeviceId { get; set; }
+    
+    [JsonPropertyName("x")]
+    public required double X { get; set; }
+    
+    [JsonPropertyName("y")]
+    public required double Y { get; set; }
+    
+    [JsonPropertyName("duration")]
+    public required double Duration { get; set; }
+    
+    [JsonPropertyName("timestamp")]
+    public required string Timestamp { get; set; }
+    
+    [JsonPropertyName("deviceTimestamp")]
+    public required string DeviceTimestamp { get; set; }
 }

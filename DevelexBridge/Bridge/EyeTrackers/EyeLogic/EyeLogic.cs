@@ -13,10 +13,16 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
     public override Func<object, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration  { get; set; } = null;
-    private ELCsApi? Api { get; set; } = null;
+    private DELCsApi? Api { get; set; } = null;
     private ConcurrentQueue<GazeSample> _gazeSamples = new();
     private bool _processingQueue = false;
-    private ELCsApi.ScreenConfig? _screenConfig = null;
+    private ConcurrentQueue<FixationStartSample> _fixationStartSamples = new();
+    private bool _processingFixationStart = false;
+    private ConcurrentQueue<FixationEndSample> _fixationEndSamples = new();
+    private bool _processingFixationEnd = false;
+    private DELCsApi.ScreenConfig? _screenConfig = null;
+    private Dictionary<int, int> _fixationIndexCache = new();
+    private int _fixationCount = 1;
 
     public override async Task<bool> Connect()
     {
@@ -24,10 +30,12 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
         try
         {
-            Api = new ELCsApi("Develex Bridge client");
+            Api = new DELCsApi("Develex Bridge client");
 
-            Api.OnEvent += OnEyeLogicApiEvent;
+            Api.OnDeviceEvent += OnEyeLogicApiEvent;
             Api.OnGazeSample += OnEyeLogicGazeSample;
+            Api.OnFixationStartSample += OnFixationStartSample;
+            Api.OnFixationEndSample += OnFixationEndSample;
             
             Api.connect();
 
@@ -150,7 +158,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         return Api != null;
     }
 
-    private void OnEyeLogicApiEvent(EventType eventType)
+    private void OnEyeLogicApiEvent(DeviceEventType eventType)
     {
         
     }
@@ -158,7 +166,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
     private void OnEyeLogicGazeSample(GazeSample gazeSample)
     {
         _gazeSamples.Enqueue(gazeSample);
-
+        
         if (!_processingQueue)
         {
             if (_screenConfig == null)
@@ -178,8 +186,9 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
         while (_gazeSamples.TryDequeue(out var gazeSample))
         {
-            var outputData = new WsOutgoingGazeMessage
+            var gazeOutput = new WsOutgoingGazeMessage
             {
+                DeviceId = gazeSample.index,
                 LeftX = gazeSample.porLeft.x / resX,
                 LeftY = gazeSample.porLeft.y / resY,
                 RightX = gazeSample.porRight.x / resX,
@@ -192,9 +201,92 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
             };
 
-            await WsResponse(outputData);
+            await WsResponse(gazeOutput);
         }
 
         _processingQueue = false;
+    }
+    
+    private void OnFixationStartSample(FixationStartSample fixationStartSample)
+    {
+        _fixationStartSamples.Enqueue(fixationStartSample);
+        
+        if (!_processingFixationStart)
+        {
+            if (_screenConfig == null)
+            {
+                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
+                
+                return;
+            }
+            
+            _ = ProcessFixationStartSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
+        }
+    }
+    
+    private async Task ProcessFixationStartSample(int resX, int resY)
+    {
+        _processingFixationStart = true;
+
+        while (_fixationStartSamples.TryDequeue(out var fixationStartSample))
+        {
+            var fixationId = _fixationCount++;
+            _fixationIndexCache[fixationStartSample.index] = fixationId;
+            
+            var gazeOutput = new WsOutgoingFixationStartMessage()
+            {
+                FixationId = fixationId,
+                GazeDeviceId = fixationStartSample.index,
+                X = fixationStartSample.por.x / resX,
+                Y = fixationStartSample.por.y / resY,
+                Duration = 0,
+                Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
+            };
+
+            await WsResponse(gazeOutput);
+        }
+
+        _processingFixationStart = false;
+    }
+    
+    private void OnFixationEndSample(FixationEndSample fixationEndSample)
+    {
+        _fixationEndSamples.Enqueue(fixationEndSample);
+        
+        if (!_processingFixationEnd)
+        {
+            if (_screenConfig == null)
+            {
+                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
+                
+                return;
+            }
+            
+            _ = ProcessFixationEndSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
+        }
+    }
+    
+    private async Task ProcessFixationEndSample(int resX, int resY)
+    {
+        _processingFixationEnd = true;
+
+        while (_fixationEndSamples.TryDequeue(out var fixationEndSample))
+        {
+            var gazeOutput = new WsOutgoingFixationStartMessage()
+            {
+                FixationId = _fixationIndexCache.GetValueOrDefault(fixationEndSample.indexStart, -1),
+                GazeDeviceId = fixationEndSample.index,
+                X = fixationEndSample.por.x / resX,
+                Y = fixationEndSample.por.y / resY,
+                Duration = (fixationEndSample.timestampMicroSec - fixationEndSample.timestampStartMicroSec) / 1000f,
+                Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
+            };
+
+            await WsResponse(gazeOutput);
+        }
+
+        _processingFixationEnd = false;
     }
 }
