@@ -22,7 +22,7 @@ public static class ConsoleOutput
 
     public static void WsStarted(string ipPort)
     {
-        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\".");
+        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\" with version \"1.1.0\".");
     }
 
     public static void WsUnableToStart(string errorMessage)
