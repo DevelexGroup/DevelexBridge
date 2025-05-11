@@ -2,6 +2,7 @@
 
 public static class ConsoleOutput
 {
+    public static readonly string Version = "1.2.1";
     public static readonly string Start = "Start";
     public static readonly string Stop = "Stop";
     
@@ -22,7 +23,7 @@ public static class ConsoleOutput
 
     public static void WsStarted(string ipPort)
     {
-        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\" with version \"1.2.1\".");
+        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\" with version \"{Version}\".");
     }
 
     public static void WsUnableToStart(string errorMessage)
