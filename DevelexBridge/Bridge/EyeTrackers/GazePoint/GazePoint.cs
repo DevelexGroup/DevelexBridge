@@ -10,10 +10,10 @@ using Bridge.Models;
 
 namespace Bridge.EyeTrackers.GazePoint;
 
-public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
+public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
-    public override Func<object, Task> WsResponse { get; init; } = wsResponse;
+    public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration  { get; set; } = null;
     
     private TcpClient? _tpcClient = null;
@@ -236,16 +236,16 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             
             var parsedData = ParseData(keyValueData);
             
-            WsResponse(parsedData.Gaze);
+            WsResponse(parsedData.Gaze, false);
 
             if (parsedData.FixationStart != null)
             {
-                WsResponse(parsedData.FixationStart);
+                WsResponse(parsedData.FixationStart, false);
             }
 
             if (parsedData.FixationEnd != null)
             {
-                WsResponse(parsedData.FixationEnd);
+                WsResponse(parsedData.FixationEnd, false);
             }
         }
     }
@@ -255,6 +255,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
         var deviceTimestamp = DateTime.UtcNow
             .AddMilliseconds(-((Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong()) /
                 Stopwatch.Frequency * 1000));
+        var currentTimestamp = DateTimeExtensions.IsoNow;
         
         var outputData = new WsOutgoingGazeMessage
         {
@@ -267,7 +268,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
             RightValidity = data.Get("RPOGV", "0") == "1",
             LeftPupil = data.Get("LPD", "0").ParseDouble(),
             RightPupil = data.Get("RPD", "0").ParseDouble(),
-            Timestamp = DateTimeExtensions.IsoNow,
+            Timestamp = currentTimestamp,
             DeviceTimestamp = deviceTimestamp.ToIso()
         };
 
@@ -289,7 +290,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
                 X = x,
                 Y = y,
                 Duration = 0,
-                Timestamp = DateTimeExtensions.IsoNow,
+                Timestamp = currentTimestamp,
                 DeviceTimestamp = deviceTimestamp.AddSeconds(-seconds).ToIso()
             };
             
@@ -300,7 +301,7 @@ public class GazePoint(Func<object, Task> wsResponse) : EyeTracker
                 X = x,
                 Y = y,
                 Duration = data.Get("FPOGD", "0").ParseDouble(),
-                Timestamp = DateTimeExtensions.IsoNow,
+                Timestamp = currentTimestamp,
                 DeviceTimestamp = deviceTimestamp.ToIso()
             };
         }

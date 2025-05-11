@@ -8,10 +8,10 @@ using eyelogic;
 
 namespace Bridge.EyeTrackers.aSee;
 
-public class ASee(Func<object, Task> wsResponse) : EyeTracker
+public class ASee(Func<object, bool, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
-    public override Func<object, Task> WsResponse { get; init; } = wsResponse;
+    public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration { get; set; }
 
     private ASeeApi.gazeCallback _gazeCallback = GazeCallback;
@@ -152,7 +152,7 @@ public class ASee(Func<object, Task> wsResponse) : EyeTracker
                 DeviceTimestamp = DateTimeOffset.FromUnixTimeSeconds((long)gazeSample.timestamp).DateTime.ToIso()
             };
             
-            await instance.WsResponse(outputData);
+            await instance.WsResponse(outputData, false);
         }
 
         _processingQueue = false;

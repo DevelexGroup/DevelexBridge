@@ -3,12 +3,14 @@ using Bridge.EyeTrackers.aSee;
 using Bridge.EyeTrackers.EyeLogic;
 using Bridge.EyeTrackers.GazePoint;
 using Bridge.Models;
+using Bridge.WebSockets;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnConnectMessage(WsClientMetadata clientMetadata, WsIncomingConnectMessage message)
+    private async Task OnConnectMessage(WebSocketSession session, WsIncomingConnectMessage message)
     {
         var responseTo = "connect";
         
@@ -22,27 +24,27 @@ public partial class BridgeWindow
             
             if (EyeTracker.State == EyeTrackerState.Connected)
             {
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers,
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers,
                     ResponseStatus.Rejected, "device already connected"));
                 return;
             }
         }
         
-        await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
+        await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
         
         switch (message.Config.TrackerType)
         {
             case "gazepoint":
-                EyeTracker = new GazePoint(SendToAll);
+                EyeTracker = new GazePoint(WsBroadcaster.SendToAll);
                 break;
             case "eyelogic":
-                EyeTracker = new EyeLogic(SendToAll);
+                EyeTracker = new EyeLogic(WsBroadcaster.SendToAll);
                 break;
             case "asee":
-                EyeTracker = new ASee(SendToAll);
+                EyeTracker = new ASee(WsBroadcaster.SendToAll);
                 break;
             default:
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "unknown tracker type"));
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "unknown tracker type"));
                 return;
         }
 
@@ -54,12 +56,12 @@ public partial class BridgeWindow
 
                 if (result)
                 {
-                    await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
+                    await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
                 }
             }
             catch (Exception ex)
             {
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
             }
         }
     }

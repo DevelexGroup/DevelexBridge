@@ -22,7 +22,7 @@ public static class ConsoleOutput
 
     public static void WsStarted(string ipPort)
     {
-        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\" with version \"1.1.0\".");
+        Console.WriteLine($"[WS] Websocket {{Green}}successfully{{Default}} started, running on \"{ipPort}\" with version \"1.2.1\".");
     }
 
     public static void WsUnableToStart(string errorMessage)
@@ -63,5 +63,15 @@ public static class ConsoleOutput
     public static void WsServerIsNotRunning()
     {
         Console.WriteLine($"[WS] Websocket server {{Red}}is not{{Default}} running.");
+    }
+
+    public static void EtStoppedRecording()
+    {
+        Console.WriteLine($"[ET] Eye tracker stopped recording.");
+    }
+
+    public static void EtStartedRecording()
+    {
+        Console.WriteLine($"[ET] Eye tracker started recording.");
     }
 }

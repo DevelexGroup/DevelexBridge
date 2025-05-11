@@ -46,4 +46,8 @@
         <HintPath>EyeTrackers\Libs\ELCsApi.dll</HintPath>
       </Reference>
     </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="SuperSocket.WebSocket.Server" Version="2.0.0" />
+    </ItemGroup>
 </Project>

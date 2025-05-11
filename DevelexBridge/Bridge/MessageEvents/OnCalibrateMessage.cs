@@ -1,12 +1,14 @@
 ﻿using System.Net.WebSockets;
 using Bridge.Enums;
 using Bridge.Models;
+using Bridge.WebSockets;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnCalibrateMessage(WsClientMetadata clientMetadata, WsIncomingCalibrateMessage message)
+    private async Task OnCalibrateMessage(WebSocketSession session, WsIncomingCalibrateMessage message)
     {
         var responseTo = "calibrate";
         
@@ -22,7 +24,7 @@ public partial class BridgeWindow
             return;
         }
         
-        await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
+        await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
 
         if (EyeTracker.State == EyeTrackerState.Started)
         {
@@ -38,12 +40,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
+            await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
         }
     }
 }

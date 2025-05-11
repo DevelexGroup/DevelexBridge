@@ -57,7 +57,7 @@ partial class BridgeWindow
         tbIpPortContainer.TabIndex = 1;
         tbIpPortContainer.BorderColor = Color.FromArgb(255, 75, 85, 99);
         tbIpPortContainer.CornerRadius = 5;
-        tbIpPortContainer.InnerTextBox.Text = "localhost:13892";
+        tbIpPortContainer.InnerTextBox.Text = "127.0.0.1:13892";
 
         // 
         // tbConsoleContainer

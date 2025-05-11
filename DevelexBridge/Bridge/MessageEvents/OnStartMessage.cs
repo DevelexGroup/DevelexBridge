@@ -1,12 +1,14 @@
 ﻿using System.Net.WebSockets;
 using Bridge.Enums;
 using Bridge.Models;
+using Bridge.WebSockets;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnStartMessage(WsClientMetadata clientMetadata, WsIncomingStartMessage message)
+    private async Task OnStartMessage(WebSocketSession session, WsIncomingStartMessage message)
     {
         var responseTo = "start";
         
@@ -22,7 +24,7 @@ public partial class BridgeWindow
             return;
         }
         
-        await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
+        await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
         
         try
         {
@@ -30,12 +32,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
+            await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
         }
     }
 }

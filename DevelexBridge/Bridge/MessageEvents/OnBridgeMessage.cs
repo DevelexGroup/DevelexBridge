@@ -1,11 +1,13 @@
 using Bridge.Models;
+using Bridge.WebSockets;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnBridgeMessage(WsClientMetadata clientMetadata, WsIncomingBridgeMessage message)
+    private async Task OnBridgeMessage(WebSocketSession session, WsIncomingBridgeMessage message)
     {
-        await SendToAll(new WsOutgoingTunnelMessage(message.Content, message.Identifiers));
+        await WsBroadcaster.SendToAll(new WsOutgoingTunnelMessage(message.Content, message.Identifiers));
     }
 }

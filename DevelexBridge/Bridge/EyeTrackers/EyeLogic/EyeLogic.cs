@@ -1,21 +1,23 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Channels;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
 using Bridge.Models;
+using Bridge.Output;
 using eyelogic;
 
 namespace Bridge.EyeTrackers.EyeLogic;
 
-public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
+public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
-    public override Func<object, Task> WsResponse { get; init; } = wsResponse;
-    public override DateTime? LastCalibration  { get; set; } = null;
+    public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
+    public override DateTime? LastCalibration { get; set; } = null;
     private DELCsApi? Api { get; set; } = null;
     private ConcurrentQueue<GazeSample> _gazeSamples = new();
-    private bool _processingQueue = false;
     private ConcurrentQueue<FixationStartSample> _fixationStartSamples = new();
     private bool _processingFixationStart = false;
     private ConcurrentQueue<FixationEndSample> _fixationEndSamples = new();
@@ -23,7 +25,9 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
     private DELCsApi.ScreenConfig? _screenConfig = null;
     private Dictionary<int, int> _fixationIndexCache = new();
     private int _fixationCount = 1;
-
+    private Thread? _sampleThread = null;
+    private CancellationTokenSource _threadCancel = new();
+    
     public override async Task<bool> Connect()
     {
         State = EyeTrackerState.Connecting;
@@ -36,7 +40,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
             Api.OnGazeSample += OnEyeLogicGazeSample;
             Api.OnFixationStartSample += OnFixationStartSample;
             Api.OnFixationEndSample += OnFixationEndSample;
-            
+
             Api.connect();
 
             var deviceConfig = Api.getDeviceConfig();
@@ -52,6 +56,8 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
             {
                 throw new EyeTrackerUnableToConnect("eyelogic screen config not found - device not connected");
             }
+            
+            StartSampleThread();
         }
         catch (Exception e)
         {
@@ -61,6 +67,8 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 Api.destroy();
                 Api = null;
             }
+            
+            StopSampleThread();
             
             State = EyeTrackerState.Disconnected;
             throw;
@@ -79,10 +87,12 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         {
             throw new EyeTrackerNotConnected("device not connected");
         }
-        
+
         Api.requestTracking(0);
 
         State = EyeTrackerState.Started;
+        
+        ConsoleOutput.EtStartedRecording();
 
         await Task.Delay(1);
 
@@ -95,10 +105,12 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         {
             throw new EyeTrackerNotConnected("device not connected");
         }
-        
-        Api.unrequestTracking();
 
+        Api.unrequestTracking();
+        
         State = EyeTrackerState.Connected;
+        
+        ConsoleOutput.EtStoppedRecording();
 
         await Task.Delay(1);
 
@@ -113,9 +125,9 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         }
 
         State = EyeTrackerState.Calibrating;
-        
+
         Api.requestTracking(0);
-        
+
         try
         {
             Api.calibrate(0);
@@ -127,7 +139,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         }
 
         LastCalibration = DateTime.UtcNow;
-        
+
         await Task.Delay(1);
 
         return true;
@@ -140,6 +152,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
             throw new EyeTrackerNotConnected("device not connected");
         }
         
+        StopSampleThread();
         Api.disconnect();
         Api.destroy();
         Api = null;
@@ -160,32 +173,42 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
 
     private void OnEyeLogicApiEvent(DeviceEventType eventType)
     {
-        
     }
 
-    private void OnEyeLogicGazeSample(GazeSample gazeSample)
+    private void StartSampleThread()
     {
-        _gazeSamples.Enqueue(gazeSample);
-        
-        if (!_processingQueue)
+        _threadCancel = new CancellationTokenSource();
+        _sampleThread = new Thread(SampleThread)
         {
-            if (_screenConfig == null)
-            {
-                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
-                
-                return;
-            }
-            
-            _ = ProcessGazeSampleQueue(_screenConfig.resolutionX, _screenConfig.resolutionY);
+            IsBackground = true
+        };
+        _sampleThread.Start();
+    }
+
+    private void StopSampleThread()
+    { 
+        _threadCancel.Cancel();
+        if (_sampleThread != null)
+        {
+            _sampleThread.Join();
+            _sampleThread = null;
+            _threadCancel.Dispose();
         }
     }
 
-    private async Task ProcessGazeSampleQueue(int resX, int resY)
+    private async void SampleThread()
     {
-        _processingQueue = true;
-
-        while (_gazeSamples.TryDequeue(out var gazeSample))
+        while (!_threadCancel.IsCancellationRequested)
         {
+            if ((State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating) || _screenConfig == null ||
+                !_gazeSamples.TryDequeue(out var gazeSample))
+            {
+                continue;
+            }
+            
+            var resX = _screenConfig.resolutionX;
+            var resY = _screenConfig.resolutionY;
+            
             var gazeOutput = new WsOutgoingGazeMessage
             {
                 DeviceId = gazeSample.index,
@@ -198,32 +221,36 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 LeftPupil = gazeSample.pupilRadiusLeft,
                 RightPupil = gazeSample.pupilRadiusRight,
                 Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000)
+                    .UtcDateTime.ToIso()
             };
-
-            await WsResponse(gazeOutput);
+            
+            await WsResponse(gazeOutput, false);
         }
-
-        _processingQueue = false;
     }
-    
+
+    private void OnEyeLogicGazeSample(GazeSample gazeSample)
+    {
+        _gazeSamples.Enqueue(gazeSample);
+    }
+
     private void OnFixationStartSample(FixationStartSample fixationStartSample)
     {
         _fixationStartSamples.Enqueue(fixationStartSample);
-        
+
         if (!_processingFixationStart)
         {
             if (_screenConfig == null)
             {
-                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
-                
+                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
+
                 return;
             }
-            
+
             _ = ProcessFixationStartSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
         }
     }
-    
+
     private async Task ProcessFixationStartSample(int resX, int resY)
     {
         _processingFixationStart = true;
@@ -232,7 +259,7 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
         {
             var fixationId = _fixationCount++;
             _fixationIndexCache[fixationStartSample.index] = fixationId;
-            
+
             var gazeOutput = new WsOutgoingFixationStartMessage()
             {
                 FixationId = fixationId,
@@ -241,32 +268,33 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 Y = fixationStartSample.por.y / resY,
                 Duration = 0,
                 Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000)
+                    .UtcDateTime.ToIso()
             };
 
-            await WsResponse(gazeOutput);
+            await WsResponse(gazeOutput, false);
         }
 
         _processingFixationStart = false;
     }
-    
+
     private void OnFixationEndSample(FixationEndSample fixationEndSample)
     {
         _fixationEndSamples.Enqueue(fixationEndSample);
-        
+
         if (!_processingFixationEnd)
         {
             if (_screenConfig == null)
             {
-                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"));
-                
+                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
+
                 return;
             }
-            
+
             _ = ProcessFixationEndSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
         }
     }
-    
+
     private async Task ProcessFixationEndSample(int resX, int resY)
     {
         _processingFixationEnd = true;
@@ -281,10 +309,11 @@ public class EyeLogic(Func<object, Task> wsResponse) : EyeTracker
                 Y = fixationEndSample.por.y / resY,
                 Duration = (fixationEndSample.timestampMicroSec - fixationEndSample.timestampStartMicroSec) / 1000f,
                 Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000).UtcDateTime.ToIso()
+                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000)
+                    .UtcDateTime.ToIso()
             };
 
-            await WsResponse(gazeOutput);
+            await WsResponse(gazeOutput, false);
         }
 
         _processingFixationEnd = false;

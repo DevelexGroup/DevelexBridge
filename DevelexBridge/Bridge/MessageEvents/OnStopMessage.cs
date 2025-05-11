@@ -1,12 +1,14 @@
 ﻿using System.Net.WebSockets;
 using Bridge.Enums;
 using Bridge.Models;
+using Bridge.WebSockets;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow
 {
-    private async Task OnStopMessage(WsClientMetadata clientMetadata, WsIncomingStopMessage message)
+    private async Task OnStopMessage(WebSocketSession session, WsIncomingStopMessage message)
     {
         var responseTo = "stop";
         
@@ -24,7 +26,7 @@ public partial class BridgeWindow
 
         if (EyeTracker.State != EyeTrackerState.Started)
         {
-            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "device not started"));
+            await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "device not started"));
             return;
         }
         
@@ -34,12 +36,12 @@ public partial class BridgeWindow
 
             if (result)
             {
-                await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
+                await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Resolved));
             }
         }
         catch (Exception ex)
         {
-            await SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
+            await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, ex.Message));
         }
     }
 }

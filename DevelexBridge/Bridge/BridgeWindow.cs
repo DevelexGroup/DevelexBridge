@@ -3,12 +3,20 @@ using Bridge.Exceptions.Parser;
 using Bridge.Models;
 using Bridge.Output;
 using Bridge.WebSockets;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using SuperSocket.ProtoBase;
+using SuperSocket.Server.Abstractions;
+using SuperSocket.Server.Host;
+using SuperSocket.WebSocket;
+using SuperSocket.WebSocket.Server;
 
 namespace Bridge;
 
 public partial class BridgeWindow : Form
 {
-    private WebSocketServer? Server { get; set; }
+    private IHost? Server { get; set; }
     private EyeTracker? EyeTracker { get; set; }
     
     public BridgeWindow()
@@ -30,11 +38,40 @@ public partial class BridgeWindow : Form
                 return;
             }
 
-            Server = new WebSocketServer(ipPort, OnMessageRecieved);
+            var ip = ipPort.Split(":");
+            var server = WebSocketHostBuilder.Create()
+                .UseWebSocketMessageHandler(OnWebSocketMessageHandle)
+                .UseSessionHandler(
+                    onConnected: session =>
+                    {
+                        WsSessionManager.Add((WebSocketSession)session);
+                        return ValueTask.CompletedTask;
+                    },
+                    onClosed: (session, reason) =>
+                    {
+                        WsSessionManager.Remove(session.SessionID);
+                        return ValueTask.CompletedTask;
+                    })
+                .ConfigureAppConfiguration((hostCtx, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string>
+                    {
+                        { "serverOptions:name", "Develex Bridge Server" },
+                        { "serverOptions:listeners:0:ip", ip[0] },
+                        { "serverOptions:listeners:0:port", ip[1] }
+                    }!);
+                })
+                .ConfigureLogging((hostCtx, loggingBuilder) =>
+                {
+                    loggingBuilder.ClearProviders();
+                })
+                .Build();
 
+            Server = server;
+            
             try
             {
-                Server.Start();
+                Task.Run(() => Server.RunAsync());
                 buttonStartStop.Text = ConsoleOutput.Stop;
                 ConsoleOutput.WsStarted(ipPort);
             }
@@ -47,15 +84,16 @@ public partial class BridgeWindow : Form
         }
         else
         {
-            if (EyeTracker != null)
+            Task.Run(async () =>
             {
-                EyeTracker.Stop();
-                EyeTracker.Disconnect();
-            }
-            
-            Task.Run(() =>
-            {
-                Server.Stop();
+                if (EyeTracker != null)
+                {
+                    await EyeTracker.Stop();
+                    await EyeTracker.Disconnect();
+                    EyeTracker = null;
+                }
+                
+                await Server.StopAsync();
                 Server.Dispose();
                 Server = null;
                 
@@ -66,10 +104,9 @@ public partial class BridgeWindow : Form
         }
     }
 
-    private async Task OnMessageRecieved(WsRecievedMessageData recievedMessageArgs)
+    private async ValueTask OnWebSocketMessageHandle(WebSocketSession session, WebSocketPackage package)
     {
-        var message = recievedMessageArgs.Data;
-        var clientMetadata = recievedMessageArgs.ClientMetadata;
+        var message = package.Message;
         
         ConsoleOutput.WsMessageRecieved(message);
 
@@ -80,38 +117,38 @@ public partial class BridgeWindow : Form
             switch (parsedMessage)
             {
                 case WsIncomingConnectMessage connectMessage:
-                    await OnConnectMessage(clientMetadata, connectMessage);
+                    await OnConnectMessage(session, connectMessage);
                     break;
                 case WsIncomingStartMessage startMessage:
-                    await OnStartMessage(clientMetadata, startMessage);
+                    await OnStartMessage(session, startMessage);
                     break;
                 case WsIncomingStopMessage stopMessage:
-                    await OnStopMessage(clientMetadata, stopMessage);
+                    await OnStopMessage(session, stopMessage);
                     break;
                 case WsIncomingCalibrateMessage calibrateMessage:
-                    await OnCalibrateMessage(clientMetadata, calibrateMessage);
+                    await OnCalibrateMessage(session, calibrateMessage);
                     break;
                 case WsIncomingDisconnectMessage disconnectMessage:
-                    await OnDisconnectMessage(clientMetadata, disconnectMessage);
+                    await OnDisconnectMessage(session, disconnectMessage);
                     break;
                 case WsIncomingBridgeStateMessage bridgeStateMessage:
-                    await OnBridgeStateMessage(clientMetadata, bridgeStateMessage);
+                    await OnBridgeStateMessage(session, bridgeStateMessage);
                     break;
                 case WsIncomingSubscribeMessage subscribeMessage:
-                    await OnSubscribeMessage(clientMetadata, subscribeMessage);
+                    await OnSubscribeMessage(session, subscribeMessage);
                     break;
                 case WsIncomingUnsubscribeMessage unsubscribeMessage:
-                    await OnUnsubscribeMessage(clientMetadata, unsubscribeMessage);
+                    await OnUnsubscribeMessage(session, unsubscribeMessage);
                     break;
                 case WsIncomingBridgeMessage bridgeMessage:
-                    await OnBridgeMessage(clientMetadata, bridgeMessage);
+                    await OnBridgeMessage(session, bridgeMessage);
                     break;
             }
         }
         catch (Exception ex)
         {
             ConsoleOutput.WsUnableToParseMessage(ex.Message);
-            await SendToAll(new WsOutgoingErrorMessage(ex.Message));
+            await WsBroadcaster.SendToAll(new WsOutgoingErrorMessage(ex.Message));
         }
     }
     
@@ -144,10 +181,5 @@ public partial class BridgeWindow : Form
         }
 
         return parsedMessage;
-    }
-    
-    private Task SendToAll<T>(T responseMessage)
-    {
-        return Server?.SendToAll(JsonSerializer.Serialize(responseMessage)) ?? Task.FromResult(false);
     }
 }
