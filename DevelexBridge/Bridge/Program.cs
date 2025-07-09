@@ -15,6 +15,21 @@ static class Program
     {
         var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EyeTrackers", "Libs");
         SetDllDirectory(dllPath);
+
+        var appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var develexFolder = Path.Combine(appDataFolder, "Develex");
+
+        if (!Directory.Exists(develexFolder))
+        {
+            Directory.CreateDirectory(develexFolder);
+        }
+
+        var develexCrashLogPath = Path.Combine(develexFolder, "crashlog.txt");
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            File.AppendAllText(develexCrashLogPath, $"{DateTime.Now} --> " + args.ExceptionObject + Environment.NewLine);
+        };
         
         ApplicationConfiguration.Initialize();
         Application.Run(new BridgeWindow());

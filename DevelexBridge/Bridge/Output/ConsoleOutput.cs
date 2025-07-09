@@ -2,7 +2,7 @@
 
 public static class ConsoleOutput
 {
-    public static readonly string Version = "1.2.1";
+    public static readonly string Version = "1.2.2";
     public static readonly string Start = "Start";
     public static readonly string Stop = "Stop";
     
