@@ -39,6 +39,10 @@ public partial class BridgeWindow : Form
             }
 
             var ip = ipPort.Split(":");
+            
+            // The communication over this connection is being closed, send is not allowed.
+            // Writing is not allowed after writer was completed.
+            
             var server = WebSocketHostBuilder.Create()
                 .UseWebSocketMessageHandler(OnWebSocketMessageHandle)
                 .UseSessionHandler(
@@ -58,7 +62,13 @@ public partial class BridgeWindow : Form
                     {
                         { "serverOptions:name", "Develex Bridge Server" },
                         { "serverOptions:listeners:0:ip", ip[0] },
-                        { "serverOptions:listeners:0:port", ip[1] }
+                        { "serverOptions:listeners:0:port", ip[1] },
+                        { "serverOptions:clearIdleSession", "false" },
+                        { "serverOptions:idleSessionTimeOut", "0" },
+                        { "serverOptions:clearIdleSessionInterval", "0" },
+                        { "serverOptions:receiveTimeout", "0" },
+                        { "serverOptions:keepAliveTime", "0" },
+                        { "serverOptions:keepAliveInterval", "0" },
                     }!);
                 })
                 .ConfigureLogging((hostCtx, loggingBuilder) =>

@@ -14,10 +14,20 @@ public static class WsBroadcaster
             Task.Run(() => Console.WriteLine($"Broadcasting message: {serializedMessage}"));
         }
 
-        return Task.WhenAll(
-            WsSessionManager.GetAll()
-                .Where(s => s.State == SessionState.Connected)
-                .Select(s => s.SendAsync(serializedMessage).AsTask())
-        );
+        var tasks = WsSessionManager.GetAll()
+            .Where(s => s.State == SessionState.Connected)
+            .Select(async s =>
+            {
+                try
+                {
+                    await s.SendAsync(serializedMessage).AsTask();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Unable to send message: {e.Message}");
+                }
+            });
+
+        return Task.WhenAll(tasks);
     }
 }
