@@ -40,7 +40,7 @@
   &lt;Assembly Path="D:\Develex\develex-bridge\DevelexBridge\Bridge\EyeTrackers\Libs\ELCApi.dll" /&gt;&#xD;
   &lt;Assembly Path="D:\Develex\develex-bridge\DevelexBridge\Bridge\EyeTrackers\Libs\ELApi.dll" /&gt;&#xD;
 &lt;/AssemblyExplorer&gt;</s:String>
-	<s:String x:Key="/Default/Environment/Highlighting/HighlightingSourceSnapshotLocation/@EntryValue">C:\Users\javie\AppData\Local\JetBrains\Rider2024.2\resharper-host\temp\Rider\vAny\CoverageData\_DevelexBridge.-1783123719\Snapshot\snapshot.utdcvr</s:String>
+	
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=7dabf42b_002Dc59e_002D4ae0_002D8f9c_002D6ac934182435/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="All tests from Solution" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;Solution /&gt;&#xD;
 &lt;/SessionState&gt;</s:String>

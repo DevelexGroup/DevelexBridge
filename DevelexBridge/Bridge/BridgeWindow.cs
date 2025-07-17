@@ -53,6 +53,7 @@ public partial class BridgeWindow : Form
                     },
                     onClosed: (session, reason) =>
                     {
+                        Console.WriteLine($"ALERT: disconnecting client because of {reason.Reason}");
                         WsSessionManager.Remove(session.SessionID);
                         return ValueTask.CompletedTask;
                     })
@@ -67,8 +68,8 @@ public partial class BridgeWindow : Form
                         { "serverOptions:idleSessionTimeOut", "0" },
                         { "serverOptions:clearIdleSessionInterval", "0" },
                         { "serverOptions:receiveTimeout", "0" },
-                        { "serverOptions:keepAliveTime", "0" },
-                        { "serverOptions:keepAliveInterval", "0" },
+                        { "serverOptions:keepAliveTime", "15000" },
+                        { "serverOptions:keepAliveInterval", "15000" },
                     }!);
                 })
                 .ConfigureLogging((hostCtx, loggingBuilder) =>

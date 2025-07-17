@@ -1,6 +1,8 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
@@ -188,6 +190,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     private void StopSampleThread()
     { 
         _threadCancel.Cancel();
+        
         if (_sampleThread != null)
         {
             _sampleThread.Join();
@@ -212,10 +215,10 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
             var gazeOutput = new WsOutgoingGazeMessage
             {
                 DeviceId = gazeSample.index,
-                LeftX = gazeSample.porLeft.x / resX,
-                LeftY = gazeSample.porLeft.y / resY,
-                RightX = gazeSample.porRight.x / resX,
-                RightY = gazeSample.porRight.y / resY,
+                LeftX = gazeSample.porLeft.x <= double.MinValue ? 0 : gazeSample.porLeft.x / resX,
+                LeftY = gazeSample.porLeft.y <= double.MinValue ? 0 : gazeSample.porLeft.y / resY,
+                RightX = gazeSample.porRight.x <= double.MinValue ? 0 : gazeSample.porRight.x / resX,
+                RightY = gazeSample.porRight.y <= double.MinValue ? 0 : gazeSample.porRight.y / resY,
                 LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
                 RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
                 LeftPupil = gazeSample.pupilRadiusLeft,
