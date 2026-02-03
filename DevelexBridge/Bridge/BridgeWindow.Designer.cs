@@ -84,7 +84,7 @@ partial class BridgeWindow
         Controls.Add(buttonStartStop);
         Name = "BridgeWindow";
         StartPosition = FormStartPosition.CenterScreen;
-        Text = "Develex Bridge";
+        Text = $"Develex Bridge - {Application.ProductVersion}";
         ResumeLayout(false);
         PerformLayout();
     }
