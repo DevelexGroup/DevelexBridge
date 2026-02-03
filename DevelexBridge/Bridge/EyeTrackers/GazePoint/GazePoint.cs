@@ -7,6 +7,7 @@ using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
 using Bridge.Models;
+using eyelogic;
 
 namespace Bridge.EyeTrackers.GazePoint;
 
@@ -22,6 +23,8 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
     private Thread? _thread = null;
     private CancellationTokenSource _threadCancel = new();
     private readonly SemaphoreSlim _calibrateLock = new(1, 1);
+    private WsOutgoingFixationStartMessage? _latestFixationStartMessage;
+    private WsOutgoingFixationEndMessage? _latestFixationEndMessage;
     
     public override async Task<bool> Connect()
     {
@@ -281,28 +284,37 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
             var gazeDeviceId = data.Get("CNT", "-1").ParseInt();
             var x = data.Get("FPOGX", "0").ParseDouble();
             var y = data.Get("FPOGY", "0").ParseDouble();
-            var seconds = data.Get("FPOGD", "0").ParseDouble();
-            
-            fixationStart = new WsOutgoingFixationStartMessage()
+            var milliseconds = data.Get("FPOGD", "0").ParseDouble() * 1000;
+
+            if (_latestFixationEndMessage is not null && _latestFixationStartMessage is not null &&
+                _latestFixationStartMessage.FixationId != fixationId)
+            {
+                fixationEnd = _latestFixationEndMessage;
+            }
+
+            if (_latestFixationStartMessage is null || _latestFixationStartMessage.FixationId != fixationId)
+            {
+                _latestFixationStartMessage = fixationStart = new WsOutgoingFixationStartMessage()
+                {
+                    FixationId = fixationId,
+                    GazeDeviceId = gazeDeviceId,
+                    X = x,
+                    Y = y,
+                    Duration = milliseconds,
+                    Timestamp = currentTimestamp,
+                    DeviceTimestamp = deviceTimestamp.AddMilliseconds(-milliseconds).ToIso()
+                };
+            }
+
+            _latestFixationEndMessage = new WsOutgoingFixationEndMessage()
             {
                 FixationId = fixationId,
                 GazeDeviceId = gazeDeviceId,
                 X = x,
                 Y = y,
-                Duration = 0,
+                Duration = milliseconds - _latestFixationStartMessage.Duration,
                 Timestamp = currentTimestamp,
-                DeviceTimestamp = deviceTimestamp.AddSeconds(-seconds).ToIso()
-            };
-            
-            fixationEnd = new WsOutgoingFixationEndMessage()
-            {
-                FixationId = fixationId,
-                GazeDeviceId = gazeDeviceId,
-                X = x,
-                Y = y,
-                Duration = data.Get("FPOGD", "0").ParseDouble(),
-                Timestamp = currentTimestamp,
-                DeviceTimestamp = deviceTimestamp.ToIso()
+                DeviceTimestamp = deviceTimestamp.AddMilliseconds(-milliseconds).ToIso()
             };
         }
 
