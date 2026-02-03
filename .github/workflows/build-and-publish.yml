@@ -46,6 +46,7 @@ jobs:
           -p:IncludeAllContentForSelfExtract=true
           -p:PublishReadyToRun=true
           -p:Version=${{ steps.vars.outputs.VERSION }}
+          -p:IncludeSourceRevisionInInformationalVersion=false
           -o ./publish
 
       - name: Upload Artifact
