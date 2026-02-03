@@ -1,0 +1,70 @@
+name: Build and Release
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set Version
+        id: get_version
+        run: |
+          $version = "1.0.0" # Základní verze, pokud nejsou tagy
+          $tag = git describe --tags --abbrev=0 2>$null
+          if ($tag) { $version = $tag.TrimStart('v') }
+
+          $commits = git rev-list --count HEAD
+          $full_version = "$version.$commits"
+
+          echo "VERSION=$full_version" >> $env:GITHUB_OUTPUT
+          echo "Build version: $full_version"
+
+      - name: Restore dependencies
+        run: dotnet restore Bridge/Bridge.csproj
+
+      - name: Publish Application
+        run: >
+          dotnet publish Bridge/Bridge.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
+          -p:PublishReadyToRun=true
+          -p:Version=${{ steps.get_version.outputs.VERSION }}
+          -o ./publish
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bridge-win-x64-${{ steps.get_version.outputs.VERSION }}
+          path: ./publish/
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            ./publish/Bridge.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
