@@ -3,7 +3,6 @@ name: Build and Release
 on:
   push:
     branches: ["main"]
-    tags: ["v*"]
   pull_request:
     branches: ["main"]
 
@@ -22,20 +21,16 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Set Version
-        id: get_version
+        id: vars
+        shell: pwsh
         run: |
-          $version = "1.0.0" # Základní verze, pokud nejsou tagy
-          $tag = git describe --tags --abbrev=0 2>$null
-          if ($tag) { $version = $tag.TrimStart('v') }
-
-          $commits = git rev-list --count HEAD
-          $full_version = "$version.$commits"
-
-          echo "VERSION=$full_version" >> $env:GITHUB_OUTPUT
-          echo "Build version: $full_version"
+          $rev = git rev-list --count HEAD
+          $version = "1.0.$rev"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "App version: $version"
 
       - name: Restore dependencies
-        run: dotnet restore Bridge/Bridge.csproj
+        run: dotnet restore DevelexBridge.sln
 
       - name: Publish Application
         run: >
@@ -47,24 +42,23 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:IncludeAllContentForSelfExtract=true
           -p:PublishReadyToRun=true
-          -p:Version=${{ steps.get_version.outputs.VERSION }}
+          -p:Version=${{ steps.vars.outputs.VERSION }}
           -o ./publish
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bridge-win-x64-${{ steps.get_version.outputs.VERSION }}
+          name: Bridge-win-x64-${{ steps.vars.outputs.VERSION }}
           path: ./publish/
 
       - name: Create Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get_version.outputs.VERSION }}
-          name: Release v${{ steps.get_version.outputs.VERSION }}
+          tag_name: v${{ steps.vars.outputs.VERSION }}
+          name: Release v${{ steps.vars.outputs.VERSION }}
           draft: false
           prerelease: false
-          files: |
-            ./publish/Bridge.exe
+          files: ./publish/Bridge.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
