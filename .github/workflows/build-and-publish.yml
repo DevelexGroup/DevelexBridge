@@ -30,11 +30,11 @@ jobs:
           echo "App version: $version"
 
       - name: Restore dependencies
-        run: dotnet restore DevelexBridge.sln
+        run: dotnet restore DevelexBridge/DevelexBridge.sln
 
       - name: Publish Application
         run: >
-          dotnet publish Bridge/Bridge.csproj
+          dotnet publish DevelexBridge/Bridge/Bridge.csproj
           -c Release
           -r win-x64
           --self-contained true
