@@ -1,6 +1,6 @@
 # develex-bridge
 
-This is a Python WebSocket bridge between remote eye-tracking devices and the develex-core JavaScript library.
+This is a Python WebSocket bridge between remote eye-tracking devices and the develex-core JavaScript library!
 
 ## WebSocket Messages
 
