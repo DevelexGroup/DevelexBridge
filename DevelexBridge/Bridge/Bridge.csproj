@@ -8,7 +8,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <PublishSingleFile>true</PublishSingleFile>
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+        <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
         <PublishTrimmed>false</PublishTrimmed>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <AssemblyName>Bridge-v$(Version)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
