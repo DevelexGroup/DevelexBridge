@@ -74,4 +74,9 @@ public static class ConsoleOutput
     {
         Console.WriteLine($"[ET] Eye tracker started recording.");
     }
+    
+    public static void EyeLogicEvent(string message)
+    {
+        Console.WriteLine($"[EyeLogic] {message}");
+    }
 }

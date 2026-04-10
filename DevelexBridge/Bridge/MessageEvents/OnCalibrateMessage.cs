@@ -26,11 +26,22 @@ public partial class BridgeWindow
         
         await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
 
-        if (EyeTracker.State == EyeTrackerState.Started)
+        // Remember if we were tracking so we can preserve that state.
+        // The EyeLogic Calibrate() method now handles tracking state internally,
+        // so we no longer need to stop/restart manually — which previously could
+        // cause calibration to be lost when tracking was unrequested and re-requested.
+        var wasStarted = EyeTracker.State == EyeTrackerState.Started;
+        
+        if (wasStarted)
         {
-            if (!await TryStop(EyeTracker))
+            // For non-EyeLogic trackers, we still need to stop first.
+            // EyeLogic handles this internally now, but other trackers may not.
+            if (EyeTracker is not EyeTrackers.EyeLogic.EyeLogic)
             {
-                return;
+                if (!await TryStop(EyeTracker))
+                {
+                    return;
+                }
             }
         }
         

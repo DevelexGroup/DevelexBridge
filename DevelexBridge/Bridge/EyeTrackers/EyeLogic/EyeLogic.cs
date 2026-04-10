@@ -21,14 +21,26 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     private DELCsApi? Api { get; set; } = null;
     private ConcurrentQueue<GazeSample> _gazeSamples = new();
     private ConcurrentQueue<FixationStartSample> _fixationStartSamples = new();
-    private bool _processingFixationStart = false;
+    private volatile bool _processingFixationStart = false;
     private ConcurrentQueue<FixationEndSample> _fixationEndSamples = new();
-    private bool _processingFixationEnd = false;
-    private DELCsApi.ScreenConfig? _screenConfig = null;
-    private Dictionary<int, int> _fixationIndexCache = new();
+    private volatile bool _processingFixationEnd = false;
+    private volatile DELCsApi.ScreenConfig? _screenConfig = null;
+    private ConcurrentDictionary<int, int> _fixationIndexCache = new();
     private int _fixationCount = 1;
     private Thread? _sampleThread = null;
     private CancellationTokenSource _threadCancel = new();
+    private System.Threading.Timer? _healthCheckTimer = null;
+
+    /// <summary>
+    /// Maximum number of entries kept in the fixation index cache before pruning.
+    /// Prevents unbounded memory growth during long sessions.
+    /// </summary>
+    private const int MaxFixationCacheSize = 10_000;
+    
+    /// <summary>
+    /// Interval in milliseconds between connection health checks.
+    /// </summary>
+    private const int HealthCheckIntervalMs = 5_000;
     
     public override async Task<bool> Connect()
     {
@@ -60,16 +72,25 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
             }
             
             StartSampleThread();
+            StartHealthCheckTimer();
         }
         catch (Exception e)
         {
             if (Api != null)
             {
-                Api.disconnect();
-                Api.destroy();
+                try
+                {
+                    Api.disconnect();
+                    Api.destroy();
+                }
+                catch
+                {
+                    // Ignore cleanup errors during failed connect
+                }
                 Api = null;
             }
             
+            StopHealthCheckTimer();
             StopSampleThread();
             
             State = EyeTrackerState.Disconnected;
@@ -77,6 +98,8 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         }
 
         State = EyeTrackerState.Connected;
+        
+        ConsoleOutput.EyeLogicEvent("Connected to EyeLogic device");
 
         await Task.Delay(1);
 
@@ -126,21 +149,64 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
             throw new EyeTrackerNotConnected("device not connected");
         }
 
+        // Remember whether we were tracking before calibration so we know
+        // whether to leave tracking on afterward.
+        var wasStarted = State == EyeTrackerState.Started;
+
         State = EyeTrackerState.Calibrating;
 
-        Api.requestTracking(0);
+        // EyeLogic requires tracking to be active during calibration.
+        // Only request tracking if we weren't already tracking.
+        if (!wasStarted)
+        {
+            Api.requestTracking(0);
+        }
 
         try
         {
             Api.calibrate(0);
         }
-        finally
+        catch (Exception)
+        {
+            // On calibration failure, restore to previous tracking state
+            if (!wasStarted)
+            {
+                try { Api.unrequestTracking(); } catch { /* ignore cleanup error */ }
+            }
+            State = wasStarted ? EyeTrackerState.Started : EyeTrackerState.Connected;
+            throw;
+        }
+
+        // Calibration succeeded — unrequest tracking only if we weren't tracking before.
+        if (!wasStarted)
         {
             Api.unrequestTracking();
             State = EyeTrackerState.Connected;
         }
+        else
+        {
+            // We were tracking before, leave tracking on so calibration
+            // stays applied to the active tracking session.
+            State = EyeTrackerState.Started;
+        }
+        
+        // Refresh screen config after calibration in case it changed
+        try
+        {
+            var newScreenConfig = Api.getActiveScreen();
+            if (newScreenConfig != null)
+            {
+                _screenConfig = newScreenConfig;
+            }
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.EyeLogicEvent($"Warning: could not refresh screen config after calibration: {ex.Message}");
+        }
 
         LastCalibration = DateTime.UtcNow;
+        
+        ConsoleOutput.EyeLogicEvent("Calibration completed successfully");
 
         await Task.Delay(1);
 
@@ -154,11 +220,22 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
             throw new EyeTrackerNotConnected("device not connected");
         }
         
+        StopHealthCheckTimer();
         StopSampleThread();
-        Api.disconnect();
-        Api.destroy();
+        
+        try
+        {
+            Api.disconnect();
+            Api.destroy();
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.EyeLogicEvent($"Warning during disconnect cleanup: {ex.Message}");
+        }
+        
         Api = null;
         _screenConfig = null;
+        ClearFixationState();
 
         State = EyeTrackerState.Disconnected;
 
@@ -173,8 +250,130 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         return Api != null;
     }
 
+    /// <summary>
+    /// Handles device events from the EyeLogic API.
+    /// This is CRITICAL for detecting connection loss, device disconnects,
+    /// tracking stops, and screen changes that would invalidate calibration.
+    /// </summary>
     private void OnEyeLogicApiEvent(DeviceEventType eventType)
     {
+        ConsoleOutput.EyeLogicEvent($"Device event received: {eventType}");
+        
+        switch (eventType)
+        {
+            case DeviceEventType.CONNECTION_CLOSED:
+                HandleConnectionLost("EyeLogic server connection was closed");
+                break;
+                
+            case DeviceEventType.DEVICE_DISCONNECTED:
+                HandleConnectionLost("EyeLogic device was disconnected");
+                break;
+                
+            case DeviceEventType.TRACKING_STOPPED:
+                HandleTrackingStopped();
+                break;
+                
+            case DeviceEventType.SCREEN_CHANGED:
+                HandleScreenChanged();
+                break;
+                
+            case DeviceEventType.DEVICE_CONNECTED:
+                ConsoleOutput.EyeLogicEvent("EyeLogic device reconnected");
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// Handles connection loss or device disconnection.
+    /// Resets the bridge state and notifies WebSocket clients.
+    /// </summary>
+    private void HandleConnectionLost(string reason)
+    {
+        ConsoleOutput.EyeLogicEvent($"CONNECTION LOST: {reason}");
+        
+        var previousState = State;
+        State = EyeTrackerState.Disconnected;
+        LastCalibration = null;
+        _screenConfig = null;
+        
+        StopHealthCheckTimer();
+        StopSampleThread();
+        
+        // Clean up API reference - it's no longer usable
+        if (Api != null)
+        {
+            try
+            {
+                Api.destroy();
+            }
+            catch
+            {
+                // API may already be in a bad state
+            }
+            Api = null;
+        }
+        
+        ClearFixationState();
+        
+        // Notify clients about the connection loss
+        _ = WsResponse(new WsOutgoingErrorMessage(
+            $"EyeLogic connection lost: {reason}. Calibration has been invalidated. Please reconnect and recalibrate."), true);
+    }
+    
+    /// <summary>
+    /// Handles the case when tracking is stopped externally (e.g., by EyeLogic server).
+    /// This can happen when another application takes over or the server decides to stop.
+    /// </summary>
+    private void HandleTrackingStopped()
+    {
+        ConsoleOutput.EyeLogicEvent("Tracking was stopped externally by EyeLogic server");
+        
+        if (State == EyeTrackerState.Started)
+        {
+            State = EyeTrackerState.Connected;
+            
+            // Notify clients that tracking was stopped externally
+            _ = WsResponse(new WsOutgoingErrorMessage(
+                "EyeLogic tracking was stopped externally. You may need to recalibrate and restart."), true);
+        }
+        else if (State == EyeTrackerState.Calibrating)
+        {
+            // Tracking stopped during calibration — calibration likely failed
+            ConsoleOutput.EyeLogicEvent("WARNING: Tracking stopped during calibration — calibration may have failed");
+        }
+    }
+    
+    /// <summary>
+    /// Handles screen configuration changes. Refreshes the screen config
+    /// and warns that calibration may be invalid for the new screen.
+    /// </summary>
+    private void HandleScreenChanged()
+    {
+        ConsoleOutput.EyeLogicEvent("Screen configuration changed — refreshing and invalidating calibration");
+        
+        if (Api != null)
+        {
+            try
+            {
+                var newConfig = Api.getActiveScreen();
+                if (newConfig != null)
+                {
+                    _screenConfig = newConfig;
+                    ConsoleOutput.EyeLogicEvent(
+                        $"Screen config updated: {newConfig.resolutionX}x{newConfig.resolutionY} ({newConfig.name})");
+                }
+            }
+            catch (Exception ex)
+            {
+                ConsoleOutput.EyeLogicEvent($"Failed to refresh screen config: {ex.Message}");
+            }
+        }
+        
+        // Screen change invalidates calibration
+        LastCalibration = null;
+        
+        _ = WsResponse(new WsOutgoingErrorMessage(
+            "Screen configuration changed. Calibration has been invalidated. Please recalibrate."), true);
     }
 
     private void StartSampleThread()
@@ -182,7 +381,8 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         _threadCancel = new CancellationTokenSource();
         _sampleThread = new Thread(SampleThread)
         {
-            IsBackground = true
+            IsBackground = true,
+            Name = "EyeLogic-GazeSampleThread"
         };
         _sampleThread.Start();
     }
@@ -193,25 +393,74 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         
         if (_sampleThread != null)
         {
-            _sampleThread.Join();
+            _sampleThread.Join(timeout: TimeSpan.FromSeconds(3));
             _sampleThread = null;
             _threadCancel.Dispose();
         }
     }
+    
+    /// <summary>
+    /// Starts a periodic health check timer that verifies the EyeLogic connection is still alive.
+    /// </summary>
+    private void StartHealthCheckTimer()
+    {
+        _healthCheckTimer = new System.Threading.Timer(HealthCheckCallback, null, HealthCheckIntervalMs, HealthCheckIntervalMs);
+    }
+    
+    private void StopHealthCheckTimer()
+    {
+        if (_healthCheckTimer != null)
+        {
+            _healthCheckTimer.Dispose();
+            _healthCheckTimer = null;
+        }
+    }
+    
+    /// <summary>
+    /// Periodic health check that verifies the EyeLogic API connection is still active.
+    /// If the connection is lost silently (without a device event), this will catch it.
+    /// </summary>
+    private void HealthCheckCallback(object? state)
+    {
+        try
+        {
+            if (Api == null || State == EyeTrackerState.Disconnected)
+                return;
+            
+            if (!Api.isConnected())
+            {
+                ConsoleOutput.EyeLogicEvent("Health check: EyeLogic connection lost (detected by polling)");
+                HandleConnectionLost("Connection lost (detected by health check)");
+            }
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.EyeLogicEvent($"Health check error: {ex.Message}");
+        }
+    }
 
+    /// <summary>
+    /// Main gaze sample processing thread. Dequeues samples and sends them via WebSocket.
+    /// Uses await to guarantee samples are sent in order. The tight busy-loop with no sleep
+    /// is intentional for ~250Hz (4ms) throughput.
+    /// </summary>
     private async void SampleThread()
     {
         while (!_threadCancel.IsCancellationRequested)
         {
-            if ((State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating) || _screenConfig == null ||
+            if ((State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating) ||
+                _screenConfig == null ||
                 !_gazeSamples.TryDequeue(out var gazeSample))
             {
                 continue;
             }
-            
-            var resX = _screenConfig.resolutionX;
-            var resY = _screenConfig.resolutionY;
-            
+
+            var screenConfig = _screenConfig;
+            if (screenConfig == null) continue;
+
+            var resX = screenConfig.resolutionX;
+            var resY = screenConfig.resolutionY;
+
             var gazeOutput = new WsOutgoingGazeMessage
             {
                 DeviceId = gazeSample.index,
@@ -227,7 +476,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
                 DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000)
                     .UtcDateTime.ToIso()
             };
-            
+
             await WsResponse(gazeOutput, false);
         }
     }
@@ -243,14 +492,14 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
 
         if (!_processingFixationStart)
         {
-            if (_screenConfig == null)
+            var screenConfig = _screenConfig;
+            if (screenConfig == null)
             {
-                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
-
+                _ = WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
                 return;
             }
 
-            _ = ProcessFixationStartSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
+            _ = ProcessFixationStartSample(screenConfig.resolutionX, screenConfig.resolutionY);
         }
     }
 
@@ -258,27 +507,39 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     {
         _processingFixationStart = true;
 
-        while (_fixationStartSamples.TryDequeue(out var fixationStartSample))
+        try
         {
-            var fixationId = _fixationCount++;
-            _fixationIndexCache[fixationStartSample.index] = fixationId;
-
-            var gazeOutput = new WsOutgoingFixationStartMessage()
+            while (_fixationStartSamples.TryDequeue(out var fixationStartSample))
             {
-                FixationId = fixationId,
-                GazeDeviceId = fixationStartSample.index,
-                X = fixationStartSample.por.x / resX,
-                Y = fixationStartSample.por.y / resY,
-                Duration = 0,
-                Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000)
-                    .UtcDateTime.ToIso()
-            };
+                var fixationId = Interlocked.Increment(ref _fixationCount);
+                _fixationIndexCache[fixationStartSample.index] = fixationId;
+                
+                // Prune cache if it grows too large to prevent memory leaks
+                PruneFixationCacheIfNeeded();
 
-            await WsResponse(gazeOutput, false);
+                var gazeOutput = new WsOutgoingFixationStartMessage()
+                {
+                    FixationId = fixationId,
+                    GazeDeviceId = fixationStartSample.index,
+                    X = fixationStartSample.por.x / resX,
+                    Y = fixationStartSample.por.y / resY,
+                    Duration = 0,
+                    Timestamp = DateTimeExtensions.IsoNow,
+                    DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000)
+                        .UtcDateTime.ToIso()
+                };
+
+                await WsResponse(gazeOutput, false);
+            }
         }
-
-        _processingFixationStart = false;
+        catch (Exception ex)
+        {
+            ConsoleOutput.EyeLogicEvent($"Error processing fixation start: {ex.Message}");
+        }
+        finally
+        {
+            _processingFixationStart = false;
+        }
     }
 
     private void OnFixationEndSample(FixationEndSample fixationEndSample)
@@ -287,14 +548,14 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
 
         if (!_processingFixationEnd)
         {
-            if (_screenConfig == null)
+            var screenConfig = _screenConfig;
+            if (screenConfig == null)
             {
-                WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
-
+                _ = WsResponse(new WsOutgoingErrorMessage("unable to get screen config, disconnect and connect again!"), true);
                 return;
             }
 
-            _ = ProcessFixationEndSample(_screenConfig.resolutionX, _screenConfig.resolutionY);
+            _ = ProcessFixationEndSample(screenConfig.resolutionX, screenConfig.resolutionY);
         }
     }
 
@@ -302,23 +563,70 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     {
         _processingFixationEnd = true;
 
-        while (_fixationEndSamples.TryDequeue(out var fixationEndSample))
+        try
         {
-            var gazeOutput = new WsOutgoingFixationStartMessage()
+            while (_fixationEndSamples.TryDequeue(out var fixationEndSample))
             {
-                FixationId = _fixationIndexCache.GetValueOrDefault(fixationEndSample.indexStart, -1),
-                GazeDeviceId = fixationEndSample.index,
-                X = fixationEndSample.por.x / resX,
-                Y = fixationEndSample.por.y / resY,
-                Duration = (fixationEndSample.timestampMicroSec - fixationEndSample.timestampStartMicroSec) / 1000f,
-                Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000)
-                    .UtcDateTime.ToIso()
-            };
+                var gazeOutput = new WsOutgoingFixationEndMessage()
+                {
+                    FixationId = _fixationIndexCache.GetValueOrDefault(fixationEndSample.indexStart, -1),
+                    GazeDeviceId = fixationEndSample.index,
+                    X = fixationEndSample.por.x / resX,
+                    Y = fixationEndSample.por.y / resY,
+                    Duration = (fixationEndSample.timestampMicroSec - fixationEndSample.timestampStartMicroSec) / 1000f,
+                    Timestamp = DateTimeExtensions.IsoNow,
+                    DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000)
+                        .UtcDateTime.ToIso()
+                };
 
-            await WsResponse(gazeOutput, false);
+                await WsResponse(gazeOutput, false);
+            }
         }
-
-        _processingFixationEnd = false;
+        catch (Exception ex)
+        {
+            ConsoleOutput.EyeLogicEvent($"Error processing fixation end: {ex.Message}");
+        }
+        finally
+        {
+            _processingFixationEnd = false;
+        }
+    }
+    
+    /// <summary>
+    /// Prunes the fixation index cache when it exceeds the maximum size.
+    /// Prevents unbounded memory growth during long recording sessions.
+    /// </summary>
+    private void PruneFixationCacheIfNeeded()
+    {
+        if (_fixationIndexCache.Count > MaxFixationCacheSize)
+        {
+            // Keep only the most recent half of entries
+            var keysToRemove = _fixationIndexCache
+                .OrderBy(kv => kv.Value)
+                .Take(_fixationIndexCache.Count / 2)
+                .Select(kv => kv.Key)
+                .ToList();
+            
+            foreach (var key in keysToRemove)
+            {
+                _fixationIndexCache.TryRemove(key, out _);
+            }
+            
+            ConsoleOutput.EyeLogicEvent($"Pruned fixation cache from {MaxFixationCacheSize}+ to {_fixationIndexCache.Count} entries");
+        }
+    }
+    
+    /// <summary>
+    /// Clears all fixation-related state. Called on disconnect or connection loss.
+    /// </summary>
+    private void ClearFixationState()
+    {
+        _fixationIndexCache.Clear();
+        _fixationCount = 1;
+        
+        // Drain queues
+        while (_gazeSamples.TryDequeue(out _)) { }
+        while (_fixationStartSamples.TryDequeue(out _)) { }
+        while (_fixationEndSamples.TryDequeue(out _)) { }
     }
 }
