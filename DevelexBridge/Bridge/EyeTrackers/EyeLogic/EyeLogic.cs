@@ -474,7 +474,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
                     DeviceTimestamp = MicrosecToIso(gazeSample.timestampMicroSec)
                 };
 
-                WsResponse(gazeOutput, false);
+                await WsResponse(gazeOutput, false);
             }
         }
         catch (OperationCanceledException)
