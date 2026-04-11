@@ -2,6 +2,7 @@
 using Bridge.EyeTrackers.aSee;
 using Bridge.EyeTrackers.EyeLogic;
 using Bridge.EyeTrackers.GazePoint;
+using Bridge.EyeTrackers.Mock;
 using Bridge.Models;
 using Bridge.WebSockets;
 using SuperSocket.WebSocket.Server;
@@ -42,6 +43,9 @@ public partial class BridgeWindow
                 break;
             case "asee":
                 EyeTracker = new ASee(WsBroadcaster.SendToAll);
+                break;
+            case "mock":
+                EyeTracker = new MockEyeTracker(WsBroadcaster.SendToAll);
                 break;
             default:
                 await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Rejected, "unknown tracker type"));

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Bridge.Exceptions.Parser;
+using Bridge.EyeTrackers.Mock;
 using Bridge.Models;
 using Bridge.Output;
 using Bridge.WebSockets;
@@ -196,5 +197,56 @@ public partial class BridgeWindow : Form
         }
 
         return parsedMessage;
+    }
+
+    private void cbMockTracker_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (cbMockTracker.Checked)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (EyeTracker != null)
+                    {
+                        try { await EyeTracker.Stop(); } catch { /* ignore */ }
+                        try { await EyeTracker.Disconnect(); } catch { /* ignore */ }
+                    }
+
+                    EyeTracker = new MockEyeTracker(WsBroadcaster.SendToAll);
+                    await EyeTracker.Connect();
+                    await EyeTracker.Start();
+
+                    ConsoleOutput.MockEvent("Mock tracker enabled and streaming from UI");
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput.MockEvent($"Failed to start mock tracker: {ex.Message}");
+                    EyeTracker = null;
+                    Invoke(() => cbMockTracker.Checked = false);
+                }
+            });
+        }
+        else
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (EyeTracker != null)
+                    {
+                        try { await EyeTracker.Stop(); } catch { /* ignore */ }
+                        try { await EyeTracker.Disconnect(); } catch { /* ignore */ }
+                        EyeTracker = null;
+                    }
+
+                    ConsoleOutput.MockEvent("Mock tracker disabled from UI");
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput.MockEvent($"Failed to stop mock tracker: {ex.Message}");
+                }
+            });
+        }
     }
 }
