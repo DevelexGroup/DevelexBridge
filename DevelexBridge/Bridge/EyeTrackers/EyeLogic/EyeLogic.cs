@@ -19,7 +19,8 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration { get; set; } = null;
     private DELCsApi? Api { get; set; } = null;
-    private BlockingCollection<GazeSample> _gazeSamples = new(new ConcurrentQueue<GazeSample>());
+    private Channel<GazeSample> _gazeChannel = Channel.CreateUnbounded<GazeSample>(
+        new UnboundedChannelOptions { SingleReader = true });
     private ConcurrentQueue<FixationStartSample> _fixationStartSamples = new();
     private volatile bool _processingFixationStart = false;
     private ConcurrentQueue<FixationEndSample> _fixationEndSamples = new();
@@ -27,7 +28,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     private volatile DELCsApi.ScreenConfig? _screenConfig = null;
     private ConcurrentDictionary<int, int> _fixationIndexCache = new();
     private int _fixationCount = 1;
-    private Thread? _sampleThread = null;
+    private Task? _sampleTask = null;
     private CancellationTokenSource _threadCancel = new();
     private System.Threading.Timer? _healthCheckTimer = null;
 
@@ -379,22 +380,19 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     private void StartSampleThread()
     {
         _threadCancel = new CancellationTokenSource();
-        _sampleThread = new Thread(SampleThread)
-        {
-            IsBackground = true,
-            Name = "EyeLogic-GazeSampleThread"
-        };
-        _sampleThread.Start();
+        _gazeChannel = Channel.CreateUnbounded<GazeSample>(
+            new UnboundedChannelOptions { SingleReader = true });
+        _sampleTask = Task.Run(() => SampleLoop(_threadCancel.Token));
     }
 
     private void StopSampleThread()
     { 
         _threadCancel.Cancel();
         
-        if (_sampleThread != null)
+        if (_sampleTask != null)
         {
-            _sampleThread.Join(timeout: TimeSpan.FromSeconds(3));
-            _sampleThread = null;
+            try { _sampleTask.Wait(TimeSpan.FromSeconds(3)); } catch { /* cancelled */ }
+            _sampleTask = null;
             _threadCancel.Dispose();
         }
     }
@@ -440,52 +438,48 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     }
 
     /// <summary>
-    /// Main gaze sample processing thread. Dequeues samples and sends them via WebSocket.
-    /// Uses BlockingCollection.Take to sleep efficiently when no data is available,
-    /// instead of burning CPU with a tight spin loop.
+    /// Main gaze sample processing loop. Reads from a Channel&lt;GazeSample&gt; which
+    /// uses lock-free, ValueTask-based signaling — much lower latency than
+    /// BlockingCollection's kernel semaphore. SingleReader = true enables further
+    /// internal optimizations.
     /// </summary>
-    private async void SampleThread()
+    private async Task SampleLoop(CancellationToken ct)
     {
-        try
+        var reader = _gazeChannel.Reader;
+
+        await foreach (var gazeSample in reader.ReadAllAsync(ct))
         {
-            foreach (var gazeSample in _gazeSamples.GetConsumingEnumerable(_threadCancel.Token))
+            if (State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating)
+                continue;
+
+            var screenConfig = _screenConfig;
+            if (screenConfig == null) continue;
+
+            var resX = screenConfig.resolutionX;
+            var resY = screenConfig.resolutionY;
+
+            var gazeOutput = new WsOutgoingGazeMessage
             {
-                if (State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating)
-                    continue;
+                DeviceId = gazeSample.index,
+                LeftX = gazeSample.porLeft.x <= double.MinValue ? 0 : gazeSample.porLeft.x / resX,
+                LeftY = gazeSample.porLeft.y <= double.MinValue ? 0 : gazeSample.porLeft.y / resY,
+                RightX = gazeSample.porRight.x <= double.MinValue ? 0 : gazeSample.porRight.x / resX,
+                RightY = gazeSample.porRight.y <= double.MinValue ? 0 : gazeSample.porRight.y / resY,
+                LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
+                RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
+                LeftPupil = gazeSample.pupilRadiusLeft,
+                RightPupil = gazeSample.pupilRadiusRight,
+                Timestamp = DateTimeExtensions.IsoNow,
+                DeviceTimestamp = MicrosecToIso(gazeSample.timestampMicroSec)
+            };
 
-                var screenConfig = _screenConfig;
-                if (screenConfig == null) continue;
-
-                var resX = screenConfig.resolutionX;
-                var resY = screenConfig.resolutionY;
-
-                var gazeOutput = new WsOutgoingGazeMessage
-                {
-                    DeviceId = gazeSample.index,
-                    LeftX = gazeSample.porLeft.x <= double.MinValue ? 0 : gazeSample.porLeft.x / resX,
-                    LeftY = gazeSample.porLeft.y <= double.MinValue ? 0 : gazeSample.porLeft.y / resY,
-                    RightX = gazeSample.porRight.x <= double.MinValue ? 0 : gazeSample.porRight.x / resX,
-                    RightY = gazeSample.porRight.y <= double.MinValue ? 0 : gazeSample.porRight.y / resY,
-                    LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
-                    RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
-                    LeftPupil = gazeSample.pupilRadiusLeft,
-                    RightPupil = gazeSample.pupilRadiusRight,
-                    Timestamp = DateTimeExtensions.IsoNow,
-                    DeviceTimestamp = MicrosecToIso(gazeSample.timestampMicroSec)
-                };
-
-                WsResponse(gazeOutput, false);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when _threadCancel is cancelled during shutdown
+            await WsResponse(gazeOutput, false);
         }
     }
 
     private void OnEyeLogicGazeSample(GazeSample gazeSample)
     {
-        _gazeSamples.Add(gazeSample);
+        _gazeChannel.Writer.TryWrite(gazeSample);
     }
 
     private void OnFixationStartSample(FixationStartSample fixationStartSample)
@@ -635,7 +629,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         _fixationCount = 1;
         
         // Drain queues
-        while (_gazeSamples.TryTake(out _)) { }
+        while (_gazeChannel.Reader.TryRead(out _)) { }
         while (_fixationStartSamples.TryDequeue(out _)) { }
         while (_fixationEndSamples.TryDequeue(out _)) { }
     }
