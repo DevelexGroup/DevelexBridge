@@ -477,7 +477,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
                     .UtcDateTime.ToIso()
             };
 
-            await WsResponse(gazeOutput, false);
+            WsResponse(gazeOutput, false);
         }
     }
 
