@@ -19,7 +19,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
     public override DateTime? LastCalibration { get; set; } = null;
     private DELCsApi? Api { get; set; } = null;
-    private ConcurrentQueue<GazeSample> _gazeSamples = new();
+    private BlockingCollection<GazeSample> _gazeSamples = new(new ConcurrentQueue<GazeSample>());
     private ConcurrentQueue<FixationStartSample> _fixationStartSamples = new();
     private volatile bool _processingFixationStart = false;
     private ConcurrentQueue<FixationEndSample> _fixationEndSamples = new();
@@ -441,49 +441,51 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
 
     /// <summary>
     /// Main gaze sample processing thread. Dequeues samples and sends them via WebSocket.
-    /// Uses await to guarantee samples are sent in order. The tight busy-loop with no sleep
-    /// is intentional for ~250Hz (4ms) throughput.
+    /// Uses BlockingCollection.Take to sleep efficiently when no data is available,
+    /// instead of burning CPU with a tight spin loop.
     /// </summary>
     private async void SampleThread()
     {
-        while (!_threadCancel.IsCancellationRequested)
+        try
         {
-            if ((State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating) ||
-                _screenConfig == null ||
-                !_gazeSamples.TryDequeue(out var gazeSample))
+            foreach (var gazeSample in _gazeSamples.GetConsumingEnumerable(_threadCancel.Token))
             {
-                continue;
+                if (State != EyeTrackerState.Started && State != EyeTrackerState.Calibrating)
+                    continue;
+
+                var screenConfig = _screenConfig;
+                if (screenConfig == null) continue;
+
+                var resX = screenConfig.resolutionX;
+                var resY = screenConfig.resolutionY;
+
+                var gazeOutput = new WsOutgoingGazeMessage
+                {
+                    DeviceId = gazeSample.index,
+                    LeftX = gazeSample.porLeft.x <= double.MinValue ? 0 : gazeSample.porLeft.x / resX,
+                    LeftY = gazeSample.porLeft.y <= double.MinValue ? 0 : gazeSample.porLeft.y / resY,
+                    RightX = gazeSample.porRight.x <= double.MinValue ? 0 : gazeSample.porRight.x / resX,
+                    RightY = gazeSample.porRight.y <= double.MinValue ? 0 : gazeSample.porRight.y / resY,
+                    LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
+                    RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
+                    LeftPupil = gazeSample.pupilRadiusLeft,
+                    RightPupil = gazeSample.pupilRadiusRight,
+                    Timestamp = DateTimeExtensions.IsoNow,
+                    DeviceTimestamp = MicrosecToIso(gazeSample.timestampMicroSec)
+                };
+
+                WsResponse(gazeOutput, false);
             }
-
-            var screenConfig = _screenConfig;
-            if (screenConfig == null) continue;
-
-            var resX = screenConfig.resolutionX;
-            var resY = screenConfig.resolutionY;
-
-            var gazeOutput = new WsOutgoingGazeMessage
-            {
-                DeviceId = gazeSample.index,
-                LeftX = gazeSample.porLeft.x <= double.MinValue ? 0 : gazeSample.porLeft.x / resX,
-                LeftY = gazeSample.porLeft.y <= double.MinValue ? 0 : gazeSample.porLeft.y / resY,
-                RightX = gazeSample.porRight.x <= double.MinValue ? 0 : gazeSample.porRight.x / resX,
-                RightY = gazeSample.porRight.y <= double.MinValue ? 0 : gazeSample.porRight.y / resY,
-                LeftValidity = gazeSample.porLeft.x > double.MinValue && gazeSample.porLeft.y > double.MinValue,
-                RightValidity = gazeSample.porRight.x > double.MinValue && gazeSample.porRight.y > double.MinValue,
-                LeftPupil = gazeSample.pupilRadiusLeft,
-                RightPupil = gazeSample.pupilRadiusRight,
-                Timestamp = DateTimeExtensions.IsoNow,
-                DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(gazeSample.timestampMicroSec / 1000)
-                    .UtcDateTime.ToIso()
-            };
-
-            WsResponse(gazeOutput, false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when _threadCancel is cancelled during shutdown
         }
     }
 
     private void OnEyeLogicGazeSample(GazeSample gazeSample)
     {
-        _gazeSamples.Enqueue(gazeSample);
+        _gazeSamples.Add(gazeSample);
     }
 
     private void OnFixationStartSample(FixationStartSample fixationStartSample)
@@ -525,8 +527,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
                     Y = fixationStartSample.por.y / resY,
                     Duration = 0,
                     Timestamp = DateTimeExtensions.IsoNow,
-                    DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationStartSample.timestampMicroSec / 1000)
-                        .UtcDateTime.ToIso()
+                    DeviceTimestamp = MicrosecToIso(fixationStartSample.timestampMicroSec)
                 };
 
                 await WsResponse(gazeOutput, false);
@@ -575,8 +576,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
                     Y = fixationEndSample.por.y / resY,
                     Duration = (fixationEndSample.timestampMicroSec - fixationEndSample.timestampStartMicroSec) / 1000f,
                     Timestamp = DateTimeExtensions.IsoNow,
-                    DeviceTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(fixationEndSample.timestampMicroSec / 1000)
-                        .UtcDateTime.ToIso()
+                    DeviceTimestamp = MicrosecToIso(fixationEndSample.timestampMicroSec)
                 };
 
                 await WsResponse(gazeOutput, false);
@@ -617,6 +617,16 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
     }
     
     /// <summary>
+    /// Converts a device timestamp in microseconds to an ISO 8601 string,
+    /// preserving full microsecond precision (no integer-division truncation).
+    /// </summary>
+    private static string MicrosecToIso(long microseconds)
+    {
+        return DateTimeOffset.FromUnixTimeMilliseconds(microseconds / 1000)
+            .UtcDateTime.ToIso();
+    }
+    
+    /// <summary>
     /// Clears all fixation-related state. Called on disconnect or connection loss.
     /// </summary>
     private void ClearFixationState()
@@ -625,7 +635,7 @@ public class EyeLogic(Func<object, bool, Task> wsResponse) : EyeTracker
         _fixationCount = 1;
         
         // Drain queues
-        while (_gazeSamples.TryDequeue(out _)) { }
+        while (_gazeSamples.TryTake(out _)) { }
         while (_fixationStartSamples.TryDequeue(out _)) { }
         while (_fixationEndSamples.TryDequeue(out _)) { }
     }
