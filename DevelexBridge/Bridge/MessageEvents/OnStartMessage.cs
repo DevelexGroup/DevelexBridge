@@ -1,5 +1,5 @@
-﻿using System.Net.WebSockets;
-using Bridge.Enums;
+﻿using Bridge.Enums;
+using Bridge.Extensions;
 using Bridge.Models;
 using Bridge.WebSockets;
 using SuperSocket.WebSocket.Server;
@@ -24,6 +24,7 @@ public partial class BridgeWindow
             return;
         }
         
+        DateTimeExtensions.ResetAnchor();
         await WsBroadcaster.SendToAll(new WsOutgoingResponseMessage(responseTo, EyeTracker, message.Identifiers, ResponseStatus.Processing));
         
         try
