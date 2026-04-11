@@ -25,6 +25,7 @@ partial class BridgeWindow
         buttonStartStop = new Button();
         tbIpPortContainer = new CustomTextBoxContainer();
         tbConsoleContainer = new CustomTextBoxContainer();
+        cbMockTracker = new CheckBox();
 
         SuspendLayout();
         // 
@@ -42,6 +43,7 @@ partial class BridgeWindow
         buttonStartStop.Text = "Zapnout";
         buttonStartStop.UseVisualStyleBackColor = false;
         buttonStartStop.FlatAppearance.BorderSize = 0;
+        buttonStartStop.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         buttonStartStop.Paint += buttonStartStop_Paint;
 
         buttonStartStop.MouseEnter += (_, _) => buttonStartStop.BackColor = hoverColor;
@@ -58,19 +60,36 @@ partial class BridgeWindow
         tbIpPortContainer.BorderColor = Color.FromArgb(255, 75, 85, 99);
         tbIpPortContainer.CornerRadius = 5;
         tbIpPortContainer.InnerTextBox.Text = "127.0.0.1:13892";
+        tbIpPortContainer.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        // 
+        // cbMockTracker
+        // 
+        cbMockTracker.AutoSize = true;
+        cbMockTracker.ForeColor = Color.FromArgb(31, 41, 55);
+        cbMockTracker.Font = new Font("Segoe UI", 9F);
+        cbMockTracker.Location = new Point(22, 57);
+        cbMockTracker.Name = "cbMockTracker";
+        cbMockTracker.Size = new Size(200, 19);
+        cbMockTracker.TabIndex = 3;
+        cbMockTracker.Text = "Enable Mock Tracker (120 Hz)";
+        cbMockTracker.UseVisualStyleBackColor = true;
+        cbMockTracker.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        cbMockTracker.CheckedChanged += cbMockTracker_CheckedChanged;
 
         // 
         // tbConsoleContainer
         // 
-        tbConsoleContainer.Location = new Point(20, 70);
+        tbConsoleContainer.Location = new Point(20, 82);
         tbConsoleContainer.Name = "tbConsoleContainer";
-        tbConsoleContainer.Size = new Size(585, 360);
+        tbConsoleContainer.Size = new Size(585, 348);
         tbConsoleContainer.TabIndex = 2;
         tbConsoleContainer.BorderColor = Color.FromArgb(255, 75, 85, 99);
         tbConsoleContainer.CornerRadius = 5;
         tbConsoleContainer.InnerTextBox.Multiline = true;
         tbConsoleContainer.InnerTextBox.ReadOnly = true;
         tbConsoleContainer.InnerTextBox.ScrollBars = RichTextBoxScrollBars.Vertical;
+        tbConsoleContainer.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
         // 
         // BridgeWindow
@@ -79,7 +98,9 @@ partial class BridgeWindow
         AutoScaleMode = AutoScaleMode.Font;
         BackColor = Color.FromArgb(255, 248, 250, 252);
         ClientSize = new Size(625, 450);
+        MinimumSize = new Size(450, 300);
         Controls.Add(tbConsoleContainer);
+        Controls.Add(cbMockTracker);
         Controls.Add(tbIpPortContainer);
         Controls.Add(buttonStartStop);
         Name = "BridgeWindow";
@@ -92,6 +113,7 @@ partial class BridgeWindow
     #endregion
 
     private Button buttonStartStop;
+    private CheckBox cbMockTracker;
     private CustomTextBoxContainer tbIpPortContainer;
     private CustomTextBoxContainer tbConsoleContainer;
 
