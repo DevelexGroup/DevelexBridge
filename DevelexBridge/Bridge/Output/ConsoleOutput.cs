@@ -80,6 +80,11 @@ public static class ConsoleOutput
         Console.WriteLine($"[EyeLogic] {message}");
     }
     
+    public static void GazePointEvent(string message)
+    {
+        Console.WriteLine($"[GazePoint] {message}");
+    }
+    
     public static void MockEvent(string message)
     {
         Console.WriteLine($"[Mock] {message}");

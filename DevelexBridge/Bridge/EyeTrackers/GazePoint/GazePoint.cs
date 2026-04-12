@@ -6,6 +6,7 @@ using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
 using Bridge.Models;
+using Bridge.Output;
 
 namespace Bridge.EyeTrackers.GazePoint;
 
@@ -13,38 +14,74 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 {
     public override EyeTrackerState State { get; set; } = EyeTrackerState.Disconnected;
     public override Func<object, bool, Task> WsResponse { get; init; } = wsResponse;
-    public override DateTime? LastCalibration  { get; set; } = null;
-    
-    private TcpClient? _tpcClient = null;
-    private NetworkStream? _dataFeeder = null;
-    private StreamWriter? _dataWriter = null;
-    private Thread? _thread = null;
-    private CancellationTokenSource _threadCancel = new();
-    private readonly SemaphoreSlim _calibrateLock = new(1, 1);
+    public override DateTime? LastCalibration { get; set; }
+
+    private TcpClient? _tcpClient;
+    private NetworkStream? _networkStream;
+    private StreamWriter? _writer;
+    private StreamReader? _reader;
+    private Task? _readerTask;
+    private CancellationTokenSource _readerCancel = new();
+    private TaskCompletionSource<bool>? _calibrationTcs;
     private WsOutgoingFixationStartMessage? _latestFixationStartMessage;
     private WsOutgoingFixationEndMessage? _latestFixationEndMessage;
-    
+
+    /// <summary>
+    /// Server-reported tick frequency for converting TIME_TICK to seconds (API §3.25).
+    /// Defaults to local Stopwatch.Frequency as a fallback.
+    /// </summary>
+    private long _timeTickFrequency = Stopwatch.Frequency;
+
+    /// <summary>
+    /// Maximum time allowed for the entire calibration procedure.
+    /// </summary>
+    private static readonly TimeSpan CALIBRATION_TIMEOUT = TimeSpan.FromSeconds(60);
+
     public override async Task<bool> Connect()
     {
         State = EyeTrackerState.Connecting;
-        
+
         try
         {
-            _tpcClient = new TcpClient("127.0.0.1", 4242);
+            _tcpClient = new TcpClient
+            {
+                NoDelay = true,            // Disable Nagle's algorithm — critical for low-latency streaming
+                ReceiveBufferSize = 65536, // 64 KB receive buffer for high-throughput 150 Hz data
+                SendBufferSize = 8192
+            };
+
+            await _tcpClient.ConnectAsync("127.0.0.1", 4242,
+                new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _tpcClient = null;
+            _tcpClient?.Dispose();
+            _tcpClient = null;
             State = EyeTrackerState.Disconnected;
             throw;
         }
 
-        _dataFeeder = _tpcClient.GetStream();
-        _dataWriter = new StreamWriter(_dataFeeder);
+        _networkStream = _tcpClient.GetStream();
+        _writer = new StreamWriter(_networkStream, Encoding.UTF8, bufferSize: 1024, leaveOpen: true)
+        {
+            AutoFlush = false
+        };
+        _reader = new StreamReader(_networkStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false,
+            bufferSize: 4096, leaveOpen: true);
+
+        // Query device information before starting the reader loop (API §3.25–3.29)
+        await QueryDeviceInfo();
+
+        // Start reader immediately — it runs continuously from Connect to Disconnect.
+        // It only processes gaze records when State == Started, and watches for
+        // calibration results when State == Calibrating.
+        // This also prevents the TCP receive buffer from filling up.
+        _readerCancel = new CancellationTokenSource();
+        _readerTask = Task.Run(() => ReaderLoop(_readerCancel.Token));
 
         State = EyeTrackerState.Connected;
 
-        await Task.Delay(1);
+        ConsoleOutput.GazePointEvent("Connected to GazePoint device on 127.0.0.1:4242");
 
         return true;
     }
@@ -52,19 +89,22 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
     public override async Task<bool> Start()
     {
         if (!IsConnected())
-        {
-            throw new EyeTrackerNotConnected("zařízení není připojené");
-        }
-        
-        await ToggleSendingData(true);
-        await _dataWriter.FlushAsync();
-        
-        _threadCancel = new();
-        _thread = new Thread(DataThread);
-        _thread.IsBackground = true;
-        _thread.Start();
+            throw new EyeTrackerNotConnected("Device is not connected");
+
+        await SendCommands(
+            "<SET ID=\"ENABLE_SEND_TIME_TICK\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_COUNTER\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"1\" />",
+            "<SET ID=\"ENABLE_SEND_DATA\" STATE=\"1\" />"
+        );
 
         State = EyeTrackerState.Started;
+
+        ConsoleOutput.GazePointEvent("Started streaming gaze data");
 
         return true;
     }
@@ -72,22 +112,31 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
     public override async Task<bool> Stop()
     {
         if (!IsConnected())
-        {
-            throw new EyeTrackerNotConnected("zařízení není připojené");
-        }
+            throw new EyeTrackerNotConnected("Device is not connected");
 
-        await ToggleSendingData(false);
-        await _dataWriter.FlushAsync();
-
-        if (_thread != null)
-        {
-            _threadCancel.Cancel();
-            _thread.Join();
-            _thread = null;
-            _threadCancel.Dispose();
-        }
-
+        // Set state BEFORE sending disable commands so the reader loop
+        // immediately stops processing new records — minimises latency.
         State = EyeTrackerState.Connected;
+
+        await SendCommands(
+            "<SET ID=\"ENABLE_SEND_DATA\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_TIME_TICK\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_COUNTER\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"0\" />",
+            "<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"0\" />"
+        );
+
+        // Emit pending fixation end for the last active fixation
+        if (_latestFixationEndMessage is not null)
+            await WsResponse(_latestFixationEndMessage, false);
+
+        _latestFixationStartMessage = null;
+        _latestFixationEndMessage = null;
+
+        ConsoleOutput.GazePointEvent("Stopped streaming gaze data");
 
         return true;
     }
@@ -95,192 +144,241 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
     public override async Task<bool> Calibrate()
     {
         if (!IsConnected())
-        {
-            throw new EyeTrackerNotConnected("zařízení není připojené");
-        }
+            throw new EyeTrackerNotConnected("Device is not connected");
+
+        var wasStarted = State == EyeTrackerState.Started;
 
         State = EyeTrackerState.Calibrating;
-        
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"1\" />\r\n");
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"1\" />\r\n");
-        await _dataWriter.FlushAsync();
-        
-        var timeout = TimeSpan.FromSeconds(5);
 
-        var buffer = new byte[1024];
-        var successfullySent = false;
+        // Set up a TaskCompletionSource so the reader loop can signal when
+        // it receives the CALIB_RESULT message — no race condition since
+        // only one task reads the TCP stream.
+        _calibrationTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await SendCommands(
+            "<SET ID=\"CALIBRATE_SHOW\" STATE=\"1\" />",
+            "<SET ID=\"CALIBRATE_START\" STATE=\"1\" />"
+        );
+
+        ConsoleOutput.GazePointEvent("Calibration started — waiting for result...");
+
+        var success = false;
 
         try
         {
-            while (true)
-            {
-                var cancellationTokenSource = new CancellationTokenSource(timeout);
-                var cancellationToken = cancellationTokenSource.Token;
-                
-                await _calibrateLock.WaitAsync(cancellationToken);
-
-                try
-                {
-                    var readTask = _dataFeeder.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
-                    
-                    if (await Task.WhenAny(readTask, Task.Delay(timeout, cancellationToken)) == readTask)
-                    {
-                        var bytesRead = await readTask;
-                        
-                        if (bytesRead <= 0) break;
-
-                        var data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-                        if (data.Contains("<CAL ID=\"CALIB_RESULT\""))
-                        {
-                            successfullySent = true;
-                            await DecodeData(data);
-                            
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        throw new TimeoutException("calibration time limit exceeded");
-                    }
-                }
-                finally
-                {
-                    _calibrateLock.Release();
-                    cancellationTokenSource.Dispose();
-                }
-            }
+            success = await _calibrationTcs.Task.WaitAsync(CALIBRATION_TIMEOUT, _readerCancel.Token);
         }
-        catch (Exception ex) when (ex is TimeoutException || ex is OperationCanceledException)
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
-            successfullySent = false;
+            ConsoleOutput.GazePointEvent($"Calibration failed: {ex.Message}");
         }
-        
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />\r\n");
-        await _dataWriter.WriteAsync("<SET ID=\"CALIBRATE_START\" STATE=\"0\" />\r\n");
-        await _dataWriter.FlushAsync();
+        finally
+        {
+            _calibrationTcs = null;
+        }
 
-        State = EyeTrackerState.Connected;
+        await SendCommands(
+            "<SET ID=\"CALIBRATE_SHOW\" STATE=\"0\" />",
+            "<SET ID=\"CALIBRATE_START\" STATE=\"0\" />"
+        );
 
-        return successfullySent;
+        // Restore to Started if we were tracking before calibration,
+        // otherwise go back to Connected.
+        State = wasStarted ? EyeTrackerState.Started : EyeTrackerState.Connected;
+
+        if (success)
+        {
+            LastCalibration = DateTime.UtcNow;
+            ConsoleOutput.GazePointEvent("Calibration completed successfully");
+        }
+
+        return success;
     }
 
     public override async Task<bool> Disconnect()
     {
         if (!IsConnected())
+            throw new EyeTrackerNotConnected("Device is not connected");
+
+        // 1. Cancel the reader task and wait for it to finish
+        await _readerCancel.CancelAsync();
+
+        if (_readerTask != null)
         {
-            throw new EyeTrackerNotConnected("zařízení není připojené");
+            try
+            {
+                await _readerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            }
+            catch
+            {
+                // Reader may already be stopped or stream broken
+            }
+
+            _readerTask = null;
         }
-        
-        _dataFeeder.Close();
-        _dataWriter.Close();
-        _tpcClient.Close();
+
+        _readerCancel.Dispose();
+
+        // 2. Dispose streams and TCP client (reader/writer use leaveOpen so stream isn't double-closed)
+        _reader?.Dispose();
+        _writer?.Dispose();
+        _networkStream?.Dispose();
+        _tcpClient?.Dispose();
+
+        _reader = null;
+        _writer = null;
+        _networkStream = null;
+        _tcpClient = null;
+
+        _latestFixationStartMessage = null;
+        _latestFixationEndMessage = null;
 
         State = EyeTrackerState.Disconnected;
 
-        await Task.Delay(1);
+        ConsoleOutput.GazePointEvent("Disconnected from GazePoint device");
 
         return true;
     }
 
-    private async void DataThread()
+    // ─────────────────────────────────────────────────────────────────────
+    //  TCP Reader Loop
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Main reader loop that runs continuously from Connect to Disconnect.
+    /// Uses <see cref="StreamReader.ReadLineAsync(CancellationToken)"/> for
+    /// efficient, allocation-light, line-based TCP reading with correct
+    /// framing — no partial messages, no split records.
+    /// </summary>
+    private async Task ReaderLoop(CancellationToken ct)
     {
-        var buffer = new byte[4096];
-        var leftover = string.Empty;
-        
-        while (!_threadCancel.IsCancellationRequested)
+        ConsoleOutput.GazePointEvent("Reader loop started");
+
+        try
         {
-            if (State != EyeTrackerState.Started || _dataFeeder == null)
+            while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(10, _threadCancel.Token);
-                continue;
-            }
+                var line = await _reader!.ReadLineAsync(ct);
 
-            try
-            {
-                var bytesRead = await _dataFeeder.ReadAsync(buffer, 0, buffer.Length, _threadCancel.Token);
-
-                if (bytesRead <= 0) continue;
-
-                var data = leftover + Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-                // Find the last complete line (ending with \n)
-                var lastNewline = data.LastIndexOf('\n');
-                
-                if (lastNewline == -1)
+                if (line == null)
                 {
-                    // No complete line yet, buffer everything
-                    leftover = data;
+                    ConsoleOutput.GazePointEvent("TCP stream ended — GazePoint Control closed the connection");
+                    break;
+                }
+
+                // Gaze data record (API §5)
+                if (line.StartsWith("<REC"))
+                {
+                    if (State == EyeTrackerState.Started)
+                    {
+                        await ProcessRecord(line);
+                    }
+
                     continue;
                 }
-                
-                // Keep incomplete trailing data for next read
-                leftover = lastNewline < data.Length - 1 ? data[(lastNewline + 1)..] : string.Empty;
-                
-                // Process only complete lines
-                await DecodeData(data[..(lastNewline + 1)]);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Log or handle read errors
-            }
-        }
-    }
 
-    private async Task DecodeData(string data)
-    {
-        var lines = data.Split("\n", StringSplitOptions.RemoveEmptyEntries);
-        var keyValueData = new Dictionary<string, string>();
-
-        foreach (var line in lines)
-        {
-            if (!line.StartsWith("<REC")) continue;
-            
-            var parts = line
-                .Split(" ", StringSplitOptions.RemoveEmptyEntries)
-                .Where(part => !part.StartsWith("<REC") && !part.StartsWith("/>"))
-                .ToArray();
-
-            if (parts.Length <= 0) continue;
-            
-            foreach (var part in parts)
-            {
-                var keyValue = part.Split("=", StringSplitOptions.RemoveEmptyEntries);
-
-                if (keyValue.Length == 2)
+                // Calibration events (API §4)
+                if (line.StartsWith("<CAL"))
                 {
-                    keyValueData[keyValue[0]] = keyValue[1].Trim('"');
+                    // Must check for exact ID="CALIB_RESULT" — not just Contains("CALIB_RESULT")
+                    // because CALIB_RESULT_PT (per-point result, §4.2) would also match.
+                    if (line.Contains("ID=\"CALIB_RESULT\""))
+                    {
+                        ConsoleOutput.GazePointEvent("Calibration final result received");
+                        _calibrationTcs?.TrySetResult(true);
+                    }
+                    else if (line.Contains("CALIB_START_PT"))
+                    {
+                        var attrs = ParseAttributes(line);
+                        ConsoleOutput.GazePointEvent(
+                            $"Calibration point {attrs.Get("PT", "?")} started");
+                    }
+                    else if (line.Contains("CALIB_RESULT_PT"))
+                    {
+                        var attrs = ParseAttributes(line);
+                        ConsoleOutput.GazePointEvent(
+                            $"Calibration point {attrs.Get("PT", "?")} completed");
+                    }
                 }
             }
-            
-            var parsedData = ParseData(keyValueData);
-            
-            await WsResponse(parsedData.Gaze, false);
-
-            if (parsedData.FixationStart != null)
-            {
-                await WsResponse(parsedData.FixationStart, false);
-            }
-
-            if (parsedData.FixationEnd != null)
-            {
-                await WsResponse(parsedData.FixationEnd, false);
-            }
         }
+        catch (OperationCanceledException)
+        {
+            // Expected during Disconnect
+        }
+        catch (IOException ex)
+        {
+            ConsoleOutput.GazePointEvent($"Reader loop IO error (connection lost?): {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            ConsoleOutput.GazePointEvent($"Reader loop error: {ex.Message}");
+        }
+
+        ConsoleOutput.GazePointEvent("Reader loop stopped");
     }
 
-    private (WsOutgoingGazeMessage Gaze, WsOutgoingFixationStartMessage? FixationStart, WsOutgoingFixationEndMessage? FixationEnd) ParseData(Dictionary<string, string> data)
+    // ─────────────────────────────────────────────────────────────────────
+    //  Record Parsing
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Processes a single &lt;REC .../&gt; line into gaze and fixation messages.
+    /// </summary>
+    private async Task ProcessRecord(string line)
     {
-        var deviceTimestamp = DateTime.UtcNow
-            .AddMilliseconds(-((Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong()) /
-                Stopwatch.Frequency * 1000));
+        var data = ParseAttributes(line);
+        if (data.Count == 0) return;
+
+        var parsed = BuildMessages(data);
+
+        await WsResponse(parsed.Gaze, false);
+
+        if (parsed.FixationStart != null)
+            await WsResponse(parsed.FixationStart, false);
+
+        if (parsed.FixationEnd != null)
+            await WsResponse(parsed.FixationEnd, false);
+    }
+
+    /// <summary>
+    /// Parses a KEY="VALUE" attribute line (works for &lt;REC&gt;, &lt;CAL&gt;, &lt;ACK&gt;).
+    /// Returns a fresh dictionary per call to avoid stale-data bugs.
+    /// </summary>
+    private static Dictionary<string, string> ParseAttributes(string line)
+    {
+        var data = new Dictionary<string, string>(16);
+
+        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var part in parts)
+        {
+            if (part[0] == '<' || part[0] == '/') continue; // skip <REC and />
+
+            var eqIndex = part.IndexOf('=');
+            if (eqIndex > 0 && eqIndex < part.Length - 1)
+            {
+                var key = part[..eqIndex];
+                var value = part[(eqIndex + 1)..].Trim('"');
+                data[key] = value;
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// Builds gaze and fixation WebSocket messages from parsed record attributes.
+    /// </summary>
+    private (WsOutgoingGazeMessage Gaze, WsOutgoingFixationStartMessage? FixationStart, WsOutgoingFixationEndMessage? FixationEnd)
+        BuildMessages(Dictionary<string, string> data)
+    {
+        var tickDelta = Stopwatch.GetTimestamp() - data.Get("TIME_TICK", "0").ParseLong();
+        var deviceTimestamp = DateTimeExtensions.HighResUtcNow
+            .AddMilliseconds(-(tickDelta / (double)_timeTickFrequency * 1000));
         var currentTimestamp = DateTimeExtensions.IsoNow;
-        
-        var outputData = new WsOutgoingGazeMessage
+
+        var gaze = new WsOutgoingGazeMessage
         {
             DeviceId = data.Get("CNT", "-1").ParseInt(),
             LeftX = data.Get("LPOGX", "0").ParseDouble(),
@@ -297,7 +395,7 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 
         WsOutgoingFixationStartMessage? fixationStart = null;
         WsOutgoingFixationEndMessage? fixationEnd = null;
-        
+
         if (data.Get("FPOGV", "0") == "1")
         {
             var fixationId = data.Get("FPOGID", "0").ParseInt();
@@ -314,7 +412,7 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 
             if (_latestFixationStartMessage is null || _latestFixationStartMessage.FixationId != fixationId)
             {
-                _latestFixationStartMessage = fixationStart = new WsOutgoingFixationStartMessage()
+                _latestFixationStartMessage = fixationStart = new WsOutgoingFixationStartMessage
                 {
                     FixationId = fixationId,
                     GazeDeviceId = gazeDeviceId,
@@ -326,7 +424,7 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
                 };
             }
 
-            _latestFixationEndMessage = new WsOutgoingFixationEndMessage()
+            _latestFixationEndMessage = new WsOutgoingFixationEndMessage
             {
                 FixationId = fixationId,
                 GazeDeviceId = gazeDeviceId,
@@ -337,32 +435,113 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
                 DeviceTimestamp = deviceTimestamp.AddMilliseconds(-milliseconds).ToIso()
             };
         }
+        else if (_latestFixationEndMessage is not null)
+        {
+            // Eyes lost (FPOGV=0) — emit the pending fixation end
+            fixationEnd = _latestFixationEndMessage;
+            _latestFixationStartMessage = null;
+            _latestFixationEndMessage = null;
+        }
 
-        return (outputData, fixationStart, fixationEnd);
+        return (gaze, fixationStart, fixationEnd);
     }
-    
-    [MemberNotNullWhen(true, nameof(_tpcClient))]
-    [MemberNotNullWhen(true, nameof(_dataFeeder))]
-    [MemberNotNullWhen(true, nameof(_dataWriter))]
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Helpers
+    // ─────────────────────────────────────────────────────────────────────
+
+    [MemberNotNullWhen(true, nameof(_tcpClient))]
+    [MemberNotNullWhen(true, nameof(_networkStream))]
+    [MemberNotNullWhen(true, nameof(_writer))]
+    [MemberNotNullWhen(true, nameof(_reader))]
     private bool IsConnected()
     {
-        return _tpcClient != null && _dataFeeder != null && _dataWriter != null;
+        return _tcpClient != null && _networkStream != null && _writer != null && _reader != null;
     }
 
-    private async Task ToggleSendingData(bool state)
+    /// <summary>
+    /// Sends multiple commands to the GazePoint server in a single flush.
+    /// Batching reduces the number of TCP segments on the wire.
+    /// </summary>
+    private async Task SendCommands(params string[] commands)
     {
-        var stateValue = state ? 1 : 0;
-        
-        if (_dataWriter != null)
+        if (_writer == null) return;
+
+        foreach (var cmd in commands)
         {
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_TIME_TICK\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_COUNTER\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_FIX\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_LEFT\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_LEFT\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_POG_RIGHT\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_PUPIL_RIGHT\" STATE=\"{stateValue}\" />\r\n");
-            await _dataWriter.WriteAsync($"<SET ID=\"ENABLE_SEND_DATA\" STATE=\"{stateValue}\" />\r\n");
+            await _writer.WriteAsync(cmd);
+            await _writer.WriteAsync("\r\n");
         }
+
+        await _writer.FlushAsync();
+    }
+
+    /// <summary>
+    /// Queries device info from the server on connect (API §3.25–3.30).
+    /// Must be called BEFORE starting the reader loop so we can read ACK responses directly.
+    /// </summary>
+    private async Task QueryDeviceInfo()
+    {
+        // TIME_TICK_FREQUENCY — needed for converting TIME_TICK to seconds (§3.25)
+        var tickFreq = await QueryServer("TIME_TICK_FREQUENCY");
+        if (tickFreq != null && tickFreq.TryGetValue("FREQ", out var freqStr) &&
+            long.TryParse(freqStr, out var freq) && freq > 0)
+        {
+            _timeTickFrequency = freq;
+            ConsoleOutput.GazePointEvent($"Time tick frequency: {_timeTickFrequency}");
+        }
+        else
+        {
+            ConsoleOutput.GazePointEvent(
+                $"Could not query TIME_TICK_FREQUENCY — falling back to Stopwatch.Frequency ({Stopwatch.Frequency})");
+        }
+
+        // PRODUCT_ID (§3.28)
+        var product = await QueryServer("PRODUCT_ID");
+        if (product != null)
+            ConsoleOutput.GazePointEvent($"Product: {product.Get("VALUE", "unknown")}");
+
+        // SERIAL_ID (§3.29)
+        var serial = await QueryServer("SERIAL_ID");
+        if (serial != null)
+            ConsoleOutput.GazePointEvent($"Serial: {serial.Get("VALUE", "unknown")}");
+
+        // SCREEN_SIZE (§3.26)
+        var screen = await QueryServer("SCREEN_SIZE");
+        if (screen != null)
+            ConsoleOutput.GazePointEvent(
+                $"Screen: {screen.Get("WIDTH", "?")}x{screen.Get("HEIGHT", "?")} at ({screen.Get("X", "0")},{screen.Get("Y", "0")})");
+
+        // API_ID (§3.31)
+        var api = await QueryServer("API_ID");
+        if (api != null)
+            ConsoleOutput.GazePointEvent($"API version: {api.Get("VALUE", "unknown")}");
+    }
+
+    /// <summary>
+    /// Sends a GET query to the server and returns the parsed ACK response attributes.
+    /// Must only be called before the reader loop is started (no concurrent reads).
+    /// </summary>
+    private async Task<Dictionary<string, string>?> QueryServer(string id)
+    {
+        if (_writer == null || _reader == null) return null;
+
+        await _writer.WriteAsync($"<GET ID=\"{id}\" />\r\n");
+        await _writer.FlushAsync();
+
+        // Read lines until we find the ACK for our query (max 10 attempts to skip
+        // any interleaved messages from the server)
+        for (var i = 0; i < 10; i++)
+        {
+            var line = await _reader.ReadLineAsync();
+            if (line == null) return null;
+
+            if (line.StartsWith("<ACK") && line.Contains($"ID=\"{id}\""))
+            {
+                return ParseAttributes(line);
+            }
+        }
+
+        return null;
     }
 }
