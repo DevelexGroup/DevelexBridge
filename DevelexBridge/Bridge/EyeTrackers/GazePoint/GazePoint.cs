@@ -1,13 +1,11 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 using Bridge.Enums;
 using Bridge.Exceptions.EyeTracker;
 using Bridge.Extensions;
 using Bridge.Models;
-using eyelogic;
 
 namespace Bridge.EyeTrackers.GazePoint;
 
@@ -136,7 +134,7 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
                         if (data.Contains("<CAL ID=\"CALIB_RESULT\""))
                         {
                             successfullySent = true;
-                            DecodeData(data);
+                            await DecodeData(data);
                             
                             break;
                         }
@@ -187,11 +185,16 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 
     private async void DataThread()
     {
+        var buffer = new byte[4096];
+        var leftover = string.Empty;
+        
         while (!_threadCancel.IsCancellationRequested)
         {
-            if (State != EyeTrackerState.Started || _dataFeeder == null) continue;
-            
-            var buffer = new byte[1024];
+            if (State != EyeTrackerState.Started || _dataFeeder == null)
+            {
+                await Task.Delay(10, _threadCancel.Token);
+                continue;
+            }
 
             try
             {
@@ -199,19 +202,36 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
 
                 if (bytesRead <= 0) continue;
 
-                var data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                var data = leftover + Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
-                // Console.WriteLine($"Received: {data}");
-
-                DecodeData(data);
+                // Find the last complete line (ending with \n)
+                var lastNewline = data.LastIndexOf('\n');
+                
+                if (lastNewline == -1)
+                {
+                    // No complete line yet, buffer everything
+                    leftover = data;
+                    continue;
+                }
+                
+                // Keep incomplete trailing data for next read
+                leftover = lastNewline < data.Length - 1 ? data[(lastNewline + 1)..] : string.Empty;
+                
+                // Process only complete lines
+                await DecodeData(data[..(lastNewline + 1)]);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch (Exception ex)
             {
+                // Log or handle read errors
             }
         }
     }
 
-    private void DecodeData(string data)
+    private async Task DecodeData(string data)
     {
         var lines = data.Split("\n", StringSplitOptions.RemoveEmptyEntries);
         var keyValueData = new Dictionary<string, string>();
@@ -239,16 +259,16 @@ public class GazePoint(Func<object, bool, Task> wsResponse) : EyeTracker
             
             var parsedData = ParseData(keyValueData);
             
-            WsResponse(parsedData.Gaze, false);
+            await WsResponse(parsedData.Gaze, false);
 
             if (parsedData.FixationStart != null)
             {
-                WsResponse(parsedData.FixationStart, false);
+                await WsResponse(parsedData.FixationStart, false);
             }
 
             if (parsedData.FixationEnd != null)
             {
-                WsResponse(parsedData.FixationEnd, false);
+                await WsResponse(parsedData.FixationEnd, false);
             }
         }
     }
